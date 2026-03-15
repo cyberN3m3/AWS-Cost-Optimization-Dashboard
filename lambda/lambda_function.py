@@ -1,17 +1,3 @@
-# lambda/lambda_function.py  —  v2.0
-#
-# AWS Cost Optimization Scanner
-# Scans all enabled AWS regions for:
-#   1. Idle EC2 instances       (CPU < 5% for 7 days)
-#   2. Unattached EBS volumes   (state: available)
-#   3. S3 without lifecycle     (no expiry/transition rules)
-#   4. Reserved Instance opps   (on-demand 30+ days, no RI coverage)
-#
-# Delivers findings via:
-#   - SNS → weekly email report
-#   - Slack webhook (optional, set SLACK_WEBHOOK_URL env var)
-#   - Lambda Function URL → live web dashboard
-
 import boto3
 import json
 import os
@@ -19,9 +5,7 @@ from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# REGION DISCOVERY
-# ─────────────────────────────────────────────────────────────────────────────
+
 def get_enabled_regions(ec2_client):
     try:
         response = ec2_client.describe_regions(
@@ -33,9 +17,9 @@ def get_enabled_regions(ec2_client):
         return ['us-east-1']
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # RIGHT-SIZING TABLE
-# ─────────────────────────────────────────────────────────────────────────────
+
 DOWNSIZE_MAP = {
     't2.medium':   't2.small',    't2.large':    't2.medium',
     't2.xlarge':   't2.large',    't2.2xlarge':  't2.xlarge',
@@ -71,9 +55,7 @@ EC2_PRICES = {
 }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# RIGHT-SIZING RECOMMENDATION ENGINE
-# ─────────────────────────────────────────────────────────────────────────────
+
 def get_rightsizing_recommendation(instance_type: str, avg_cpu: float) -> dict:
     current_cost = EC2_PRICES.get(instance_type, 75.00)
 
@@ -104,9 +86,9 @@ def get_rightsizing_recommendation(instance_type: str, avg_cpu: float) -> dict:
     }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # EC2 SCANNER
-# ─────────────────────────────────────────────────────────────────────────────
+
 def get_idle_ec2_instances(ec2_client, cw_client, region):
     idle = []
     paginator = ec2_client.get_paginator('describe_instances')
@@ -162,9 +144,9 @@ def get_idle_ec2_instances(ec2_client, cw_client, region):
     return idle
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # EBS SCANNER
-# ─────────────────────────────────────────────────────────────────────────────
+
 def get_unattached_ebs_volumes(ec2_client, region):
     unattached = []
     paginator = ec2_client.get_paginator('describe_volumes')
@@ -193,9 +175,9 @@ def get_unattached_ebs_volumes(ec2_client, region):
     return unattached
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # S3 SCANNER
-# ─────────────────────────────────────────────────────────────────────────────
+
 def get_s3_buckets_without_lifecycle(s3_client):
     no_lifecycle = []
     response = s3_client.list_buckets()
@@ -218,9 +200,9 @@ def get_s3_buckets_without_lifecycle(s3_client):
     return no_lifecycle
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # RESERVED INSTANCE ANALYSER
-# ─────────────────────────────────────────────────────────────────────────────
+
 def get_reserved_instance_opportunities(ec2_client, region):
     opportunities = []
     paginator = ec2_client.get_paginator('describe_instances')
@@ -280,9 +262,9 @@ def get_reserved_instance_opportunities(ec2_client, region):
     return opportunities
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # COST HELPERS
-# ─────────────────────────────────────────────────────────────────────────────
+
 def _ebs_monthly_cost(size_gb: int, vol_type: str) -> float:
     prices = {
         'gp2': 0.10, 'gp3': 0.08, 'io1': 0.125,
@@ -291,9 +273,9 @@ def _ebs_monthly_cost(size_gb: int, vol_type: str) -> float:
     return round(size_gb * prices.get(vol_type, 0.10), 2)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # SLACK NOTIFIER
-# ─────────────────────────────────────────────────────────────────────────────
+
 def send_slack_notification(webhook_url: str, summary: dict):
     import urllib.request
 
@@ -361,9 +343,9 @@ def send_slack_notification(webhook_url: str, summary: dict):
         print(f"Slack notification failed (non-fatal): {e}")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # REPORT GENERATOR
-# ─────────────────────────────────────────────────────────────────────────────
+
 def generate_report(idle_ec2, unattached_ebs, s3_no_lifecycle,
                     ri_opportunities, regions_scanned):
 
@@ -466,9 +448,9 @@ def generate_report(idle_ec2, unattached_ebs, s3_no_lifecycle,
     return '\n'.join(lines), total
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # CONCURRENT REGION SCANNER
-# ─────────────────────────────────────────────────────────────────────────────
+
 def scan_region(region):
     try:
         ec2 = boto3.client('ec2',        region_name=region)
@@ -493,9 +475,9 @@ def scan_region(region):
         return {'idle_ec2': [], 'unattached_ebs': [], 'ri_opps': []}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # LAMBDA ENTRY POINT
-# ─────────────────────────────────────────────────────────────────────────────
+
 def lambda_handler(event, context):
     home_region   = os.environ.get('AWS_REGION', 'us-east-1')
     topic_arn     = os.environ.get('SNS_TOPIC_ARN')

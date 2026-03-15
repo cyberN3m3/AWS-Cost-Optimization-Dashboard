@@ -1188,9 +1188,9 @@ function renderS3(rows) {
     </tr>`).join('');
 }
 
-// =============================================================================
+
 // RENDER RESERVED INSTANCES
-// =============================================================================
+
 function renderRI(rows) {
   const wrap = document.getElementById('riTableWrap');
 
@@ -1240,9 +1240,9 @@ function renderRI(rows) {
     </tr>`).join('');
 }
 
-// =============================================================================
+
 // UPDATE METRIC CARDS
-// =============================================================================
+
 function updateMetrics(data) {
   const ec2Rows = data.idle_ec2         || [];
   const ebsRows = data.unattached_ebs   || [];
@@ -1324,9 +1324,9 @@ function updateMetrics(data) {
     : `<strong class="safe">$0.00 identified</strong>`;
 }
 
-// =============================================================================
+
 // SCAN FLOW
-// =============================================================================
+
 const SCAN_STEPS = [
   'Discovering enabled regions…',
   'Scanning EC2 + CloudWatch CPU metrics…',
@@ -1374,7 +1374,7 @@ function runScan() {
     })
     .then(raw => {
       clearInterval(t);
-      // Lambda Function URL returns the JSON directly (no body wrapper)
+      
       const data = (typeof raw.body === 'string') ? JSON.parse(raw.body) : raw;
       localStorage.setItem(LS_KEY_DATA, JSON.stringify(data));
       localStorage.setItem(LS_KEY_TIME, new Date().toISOString());
@@ -1438,9 +1438,9 @@ function finishScan(data, isLive) {
   renderRI(data.ri_opportunities || []);
 }
 
-// =============================================================================
+
 // BANNER + ERROR
-// =============================================================================
+
 function setConnectedBanner(isConnected) {
   const banner = document.getElementById('connectBanner');
   if (isConnected) {
@@ -1490,9 +1490,7 @@ function hideError() {
   if (el) el.remove();
 }
 
-// =============================================================================
-// CONNECT + EXPORT
-// =============================================================================
+
 function connectApi() {
   const input = document.getElementById('apiEndpointInput');
   const url   = input.value.trim();
@@ -1561,15 +1559,13 @@ function exportReport() {
   a.click();
 }
 
-// =============================================================================
-// INIT
-// =============================================================================
+
 (function init() {
   const input    = document.getElementById('apiEndpointInput');
   const savedUrl = HARDCODED_API_URL || localStorage.getItem(LS_KEY_URL) || '';
   if (savedUrl) input.value = savedUrl;
 
-  // Restore cached scan if available and format is current
+ t
   const savedData = localStorage.getItem(LS_KEY_DATA);
   const savedTime = localStorage.getItem(LS_KEY_TIME);
   if (savedData && savedUrl) {
@@ -1582,7 +1578,7 @@ function exportReport() {
           `Last scan: ${t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} (cached)`;
         return;
       }
-      // Stale format — clear and re-scan
+      
       localStorage.removeItem(LS_KEY_DATA);
       localStorage.removeItem(LS_KEY_TIME);
     } catch(e) {
@@ -1591,7 +1587,7 @@ function exportReport() {
     }
   }
 
-  // Auto-scan if URL is set, otherwise show sample data
+  
   if (savedUrl) {
     runScan();
   } else {
