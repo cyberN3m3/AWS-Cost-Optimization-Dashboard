@@ -6,6 +6,10 @@
 ![Cost](https://img.shields.io/badge/Monthly%20Cost-$0.00-brightgreen?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
+**🔴 Live Demo → [http://aws-cost-opt123.s3-website-us-east-1.amazonaws.com](http://aws-cost-opt123.s3-website-us-east-1.amazonaws.com)**
+
+---
+
 I built this because I kept seeing the same thing on AWS accounts servers sitting idle, storage volumes nobody deleted, S3 buckets growing forever with no lifecycle rules. AWS doesn't tell you about any of it. It just bills you.
 
 So I built a scanner that runs every Monday morning, checks every region in the account, and emails me exactly what's being wasted and how much it costs. First time I ran it on my own account it found a t3.micro that had been running for a week at 0.56% CPU — $45.60/year, doing nothing.
