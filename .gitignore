@@ -1,6 +1,6 @@
 # Terraform state — contains real AWS resource IDs, never commit
 *.tfstate
-*.tfstate.backup
+*.tfstate.*
 .terraform/
 .terraform.lock.hcl
 
