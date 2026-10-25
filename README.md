@@ -80,8 +80,8 @@ aws configure
 ### Deploy
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/aws-cost-optimizer
-cd aws-cost-optimizer/terraform
+git clone https://github.com/cyberN3m3/AWS-Cost-Optimization-Dashboard.git
+cd AWS-Cost-Optimization-Dashboard/terraform
 
 cp terraform.tfvars.example terraform.tfvars
 # Fill in your region, email, and optionally a Slack webhook
@@ -105,7 +105,7 @@ AWS sends a confirmation email straight away. You need to click **"Confirm subsc
 
 ### Connect the dashboard
 
-Open `index.html`, find this line near the top of the script block, and paste in your endpoint:
+Open `frontend/index.html`, find this line near the top of the script block, and paste in your endpoint:
 
 ```javascript
 const HARDCODED_API_URL = 'https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com/scan';
@@ -136,8 +136,9 @@ aws s3api put-public-access-block \
   --bucket $BUCKET \
   --public-access-block-configuration \
   "BlockPublicAcls=false,IgnorePublicAcls=false,BlockPublicPolicy=false,RestrictPublicBuckets=false"
-aws s3api put-bucket-policy --bucket $BUCKET --policy file://bucket-policy.json
-aws s3 cp index.html s3://$BUCKET/index.html --content-type "text/html"
+sed "s/YOUR_BUCKET_NAME/$BUCKET/" bucket-policy.json > /tmp/policy.json
+aws s3api put-bucket-policy --bucket $BUCKET --policy file:///tmp/policy.json
+aws s3 cp frontend/index.html s3://$BUCKET/index.html --content-type "text/html"
 ```
 
 ---
@@ -206,18 +207,19 @@ The `.gitignore` already covers all of these. Run `git status` before pushing ju
 ## Project structure
 
 ```
-aws-cost-optimizer/
+AWS-Cost-Optimization-Dashboard/
 ├── lambda/
 │   └── lambda_function.py        # all the scanning logic lives here
 ├── terraform/
 │   ├── main.tf                   # every AWS resource
 │   ├── variables.tf
 │   ├── outputs.tf
-│   ├── terraform.tfvars          # your config — gitignored
-│   └── terraform.tfvars.example  # safe to commit
-├── index.html                    # the dashboard
-├── bucket-policy.json
+│   ├── terraform.tfvars.example  # copy to terraform.tfvars (git-ignored)
+├── frontend/
+│   └── index.html                # the dashboard
+├── bucket-policy.json            # public-read policy for the dashboard bucket
 ├── .gitignore
+├── LICENSE
 └── README.md
 ```
 
