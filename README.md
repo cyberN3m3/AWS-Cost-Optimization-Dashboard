@@ -12,16 +12,16 @@
 
 I built this because I kept seeing the same thing on AWS accounts servers sitting idle, storage volumes nobody deleted, S3 buckets growing forever with no lifecycle rules. AWS doesn't tell you about any of it. It just bills you.
 
-So I built a scanner that runs every Monday morning, checks every region in the account, and emails me exactly what's being wasted and how much it costs. First time I ran it on my own account it found a t3.micro that had been running for a week at 0.56% CPU — $45.60/year, doing nothing.
+So I built a scanner that runs every Monday morning, checks every region in the account, and emails me exactly what's being wasted and how much it costs. First time I ran it on my own account it found a t3.micro that had been running for a week at 0.56% CPU: $45.60 a year, doing nothing.
 
 ---
 
 ## What it finds
 
-- **Idle EC2 instances** — anything running below 5% average CPU for 7 days. It also tells you what to do: stop it entirely, or downsize to a smaller instance type if there's some workload
-- **Unattached EBS volumes** — storage that's just sitting there in "available" state, not attached to anything, still costing money every month
-- **S3 buckets without lifecycle rules** — buckets that will just keep accumulating to Standard storage forever because nobody set an expiry or transition policy
-- **Reserved Instance opportunities** — instances that have been running on-demand for 30+ days that would be 30–40% cheaper on a 1-year RI
+- **Idle EC2 instances**: anything running below 5% average CPU for 7 days. It also tells you what to do: stop it entirely, or downsize to a smaller instance type if there's some workload
+- **Unattached EBS volumes**: storage that's just sitting there in "available" state, not attached to anything, still costing money every month
+- **S3 buckets without lifecycle rules**: buckets that will just keep accumulating to Standard storage forever because nobody set an expiry or transition policy
+- **Reserved Instance opportunities**: instances that have been running on-demand for 30+ days that would be 30–40% cheaper on a 1-year RI
 
 ---
 
@@ -29,7 +29,7 @@ So I built a scanner that runs every Monday morning, checks every region in the 
 
 Lambda runs on a cron every Monday at 08:00 UTC. It discovers all enabled regions, scans them all at the same time using Python threads, and generates a report. The report goes out via SNS email and optionally Slack. There's also a web dashboard that lets you trigger a scan manually and see the results live.
 
-Everything is Terraform — one `terraform apply` and it's all up. One `terraform destroy` and it's all gone.
+Everything is Terraform. One `terraform apply` and it's all up. One `terraform destroy` and it's all gone.
 
 ```
 EventBridge (Monday 08:00 UTC)
@@ -57,7 +57,7 @@ EventBridge (Monday 08:00 UTC)
 | Scheduler | Amazon EventBridge |
 | Alerts | SNS + Slack webhook |
 | API | API Gateway v2 (HTTP) |
-| Frontend | Plain HTML/CSS/JS — no framework |
+| Frontend | Plain HTML/CSS/JS, no framework |
 | Dashboard hosting | S3 static website |
 
 ---
@@ -121,7 +121,7 @@ curl -X POST https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com/scan --ssl-n
 curl -X POST https://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com/scan
 ```
 
-If you get back a JSON payload with `scanned_at`, `regions_scanned`, and `idle_ec2` — you're good.
+If you get back a JSON payload with `scanned_at`, `regions_scanned`, and `idle_ec2`, you're good.
 
 ---
 
@@ -186,10 +186,10 @@ The Lambda role is **read-only**. Here's every permission it has:
 | `ec2:Describe*` | Read running instances, volumes, regions, reserved instances |
 | `s3:ListAllMyBuckets`, `s3:GetBucketLifecycleConfiguration` | Check bucket lifecycle configs |
 | `cloudwatch:GetMetricStatistics` | Pull CPU utilisation data |
-| `sns:Publish` | Send the report — scoped to the specific topic ARN, not `*` |
+| `sns:Publish` | Send the report; scoped to the specific topic ARN, not `*` |
 | `logs:CreateLogStream`, `logs:PutLogEvents` | Lambda execution logs |
 
-It cannot stop, start, delete, create, or modify anything. If you want to share it with a client before deploying on their account, just show them the IAM policy in `terraform/main.tf` — everything is explicit.
+It cannot stop, start, delete, create, or modify anything. If you want to share it with a client before deploying on their account, just show them the IAM policy in `terraform/main.tf`. Everything is explicit.
 
 **Files you should never commit:**
 
@@ -237,10 +237,10 @@ Removes everything in about 30 seconds. Good habit to run this after a demo if y
 
 ## Things I'd add next
 
-- **Multi-account support** — the real value for consulting is running this across an entire AWS Organization, not just one account. `sts:AssumeRole` into each member account and aggregate the findings
-- **RDS idle detection** — same CPU logic but for databases, which are typically 2–4× more expensive than EC2
-- **Historical tracking** — store each weekly scan in DynamoDB so you can see whether waste is trending up or down over time
-- **Slack interactive buttons** — click "Stop instance" directly from the Slack alert instead of having to go to the console
+- **Multi-account support**: the real value for consulting is running this across an entire AWS Organization, not just one account. `sts:AssumeRole` into each member account and aggregate the findings
+- **RDS idle detection**: same CPU logic but for databases, which are typically 2–4× more expensive than EC2
+- **Historical tracking**: store each weekly scan in DynamoDB so you can see whether waste is trending up or down over time
+- **Slack interactive buttons**: click "Stop instance" directly from the Slack alert instead of having to go to the console
 
 ---
 
