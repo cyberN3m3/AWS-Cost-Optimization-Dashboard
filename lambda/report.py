@@ -56,7 +56,7 @@ def money(value):
 def email_summary(report, report_location=''):
     t = report['totals']
     lines = [
-        f"AWS cost report, {report['scanned_at']}",
+        f"CostPatrol report, {report['scanned_at']}",
         f"Regions scanned: {len(report['regions_scanned'])}",
         '',
     ]
@@ -150,7 +150,7 @@ def render_html(report):
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AWS cost report {e(report['scanned_at'])}</title>
+<title>CostPatrol report {e(report['scanned_at'])}</title>
 <style>
 body{{font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;color:#1d2433;max-width:1080px;margin:32px auto;padding:0 20px;line-height:1.45}}
 h1{{font-size:26px;margin:0 0 4px}} h2{{font-size:19px;margin:32px 0 8px}}
@@ -166,7 +166,7 @@ th{{background:#f6f7f9;font-weight:600}} caption{{text-align:left;font-weight:60
 .callout{{background:#f3f6fb;border-left:4px solid #3b6fd8;padding:10px 14px}}
 @media print{{body{{margin:0}} .findings tr{{page-break-inside:avoid}}}}
 </style></head><body>
-<h1>AWS cost report</h1>
+<h1>CostPatrol report</h1>
 <div class="muted">Scanned {e(report['scanned_at'])} &middot; {len(report['regions_scanned'])} regions
 {('&middot; account ' + e(report['account_id'])) if report.get('account_id') else ''} &middot; read-only scan, nothing was changed</div>
 {sample_note}
