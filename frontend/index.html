@@ -4,218 +4,277 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cost Optimizer: AWS cost report</title>
-<meta name="description" content="Read-only weekly scan for wasted AWS spend, ranked by monthly saving.">
+<meta name="description" content="A read-only weekly scan of an AWS account: what the bill is doing, and which savings to act on first.">
+<meta property="og:title" content="Cost Optimizer: AWS cost report">
+<meta property="og:description" content="A read-only weekly scan of an AWS account: what the bill is doing, and which savings to act on first.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#F6F4F0">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F1D1A'/%3E%3Cpath d='M9 21.5h14M9 16.5h9M9 11.5h5' stroke='%23F6F4F0' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --bg: #F7F5F2; --surface: #FFFFFF; --border: #E6E2DC; --text: #1C1B18;
-    --muted: #6F6B65; --faint: #A9A49C; --accent: #D4500E; --accent-bg: #FEF0E9;
-    --green: #1A7F4B; --green-bg: #EAF7EF; --amber: #8A5A06; --amber-bg: #FDF4E3;
-    --red: #B42318; --red-bg: #FDECEA; --blue: #2E4FA5; --blue-bg: #EEF3FF;
-    --shadow: 0 1px 2px rgba(28,27,24,.04), 0 2px 10px rgba(28,27,24,.05);
-    --radius: 12px;
+    /* one warm neutral family, one accent, semantic red/green only for money moving */
+    --bg: #F6F4F0;
+    --ink: #1F1D1A;
+    --ink-2: #4A463F;
+    --muted: #77716A;
+    --faint: #A39D94;
+    --line: #E3DFD8;
+    --line-soft: #ECE9E3;
+    --wash: #EFECE6;
+    --accent: #A8532E;
+    --up: #A33A2B;
+    --down: #3D7350;
+    --focus: #3E5E8C;
+    --ease: cubic-bezier(.2, .7, .2, 1);
+    --z-bar: 10;
   }
-  html { font-size: 15px; -webkit-font-smoothing: antialiased; }
-  body { font-family: 'Geist', 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.55; }
-  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
+  html { font-size: 15px; -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
+  body { font-family: 'Geist', 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.55; font-feature-settings: 'ss01'; }
+  .num, td.saving, .metric .value, .bar-row .amt, .riser .amt { font-variant-numeric: tabular-nums; }
+  h1, h2, h3 { text-wrap: balance; }
+  p { text-wrap: pretty; }
+  a { color: inherit; text-underline-offset: 3px; text-decoration-thickness: 1px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 28px; }
   @media (max-width: 640px) { .wrap { padding: 0 16px; } }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+
+  .skip { position: absolute; left: 16px; top: -48px; background: var(--ink); color: var(--bg); padding: 8px 12px; border-radius: 6px; z-index: calc(var(--z-bar) + 1); transition: top .2s var(--ease); }
+  .skip:focus { top: 12px; }
 
   /* top bar */
-  .topbar { position: sticky; top: 0; z-index: 10; background: rgba(247,245,242,.94); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
-  .topbar .wrap { height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
-  .mark { width: 28px; height: 28px; border-radius: 7px; background: var(--text); display: grid; place-items: center; flex-shrink: 0; }
-  .brand b { font-weight: 600; font-size: .9rem; white-space: nowrap; }
-  .brand span { color: var(--muted); font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .actions { display: flex; gap: 8px; align-items: center; }
-  .btn { font: inherit; font-size: .82rem; font-weight: 500; border-radius: 8px; padding: 7px 13px; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text); white-space: nowrap; }
-  .btn:hover { border-color: #CDC9C2; }
-  .btn.primary { background: var(--text); color: #fff; border-color: var(--text); }
-  .btn:focus-visible, .chip:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .bar { position: sticky; top: 0; z-index: var(--z-bar); background: rgba(246, 244, 240, .92); backdrop-filter: saturate(140%) blur(8px); border-bottom: 1px solid var(--line); }
+  .bar .wrap { height: 56px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; text-decoration: none; }
+  .brand b { font-weight: 600; font-size: .95rem; letter-spacing: -.01em; white-space: nowrap; }
+  .brand span { color: var(--muted); font-size: .84rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .actions { display: flex; gap: 4px; align-items: center; }
+  .btn { font: inherit; font-size: .86rem; font-weight: 500; border-radius: 7px; padding: 7px 12px; cursor: pointer; border: 1px solid transparent; background: transparent; color: var(--ink-2); white-space: nowrap; transition: background-color .2s var(--ease), color .2s var(--ease), transform .12s var(--ease); }
+  .btn:hover { background: var(--wash); color: var(--ink); }
+  .btn:active { transform: translateY(1px); }
+  .btn.primary { background: var(--ink); color: var(--bg); padding: 7px 14px; margin-left: 6px; }
+  .btn.primary:hover { background: #33302B; }
   @media (max-width: 640px) { .brand span, .btn.print { display: none; } }
 
-  /* header */
-  header.hero { padding: 40px 0 8px; }
-  .hero h1 { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: clamp(2rem, 4.6vw, 3rem); line-height: 1.1; letter-spacing: -.01em; }
-  .hero h1 em { color: var(--accent); }
-  .meta { color: var(--muted); font-size: .86rem; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
-  .banner { margin-top: 18px; border-radius: 10px; padding: 12px 16px; font-size: .88rem; display: flex; gap: 10px; align-items: flex-start; }
-  .banner.sample { background: var(--amber-bg); color: #5F3F05; border: 1px solid #F1DDB4; }
-  .banner.loaded { background: var(--green-bg); color: #145C37; border: 1px solid #C6E7D3; }
-  .banner.error { background: var(--red-bg); color: var(--red); border: 1px solid #F5C6C1; }
-  .banner strong { font-weight: 600; }
+  /* lead: the answer first */
+  .lead-block { padding: 64px 0 40px; }
+  .eyebrow { font-size: .88rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 18px; }
+  .eyebrow span + span::before { content: ''; display: inline-block; width: 3px; height: 3px; border-radius: 50%; background: var(--faint); vertical-align: middle; margin: 0 12px 0 -10px; }
+  .headline { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: clamp(2.6rem, 6.4vw, 4.6rem); line-height: 1.02; letter-spacing: -.02em; margin-top: 18px; max-width: 16ch; }
+  .headline .figure { white-space: nowrap; }
+  .standfirst { margin-top: 18px; color: var(--ink-2); font-size: 1.06rem; max-width: 60ch; }
+  .note { margin-top: 26px; display: flex; gap: 12px; align-items: flex-start; font-size: .9rem; color: var(--ink-2); max-width: 72ch; }
+  .note::before { content: ''; flex: 0 0 8px; height: 8px; margin-top: 7px; background: var(--accent); }
+  .note.ok::before { background: var(--down); }
+  .note.error { color: var(--up); }
+  .note.error::before { background: var(--up); }
+  .note strong { font-weight: 600; color: var(--ink); }
+  .note.error strong { color: var(--up); }
 
-  /* KPI cards */
-  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 22px 0 8px; }
-  @media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  @media (max-width: 460px) { .kpis { grid-template-columns: 1fr; } }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
-  .kpi { padding: 16px 18px; min-width: 0; }
-  .kpi.dark { background: var(--text); color: #fff; border-color: var(--text); }
-  .kpi .label { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 500; }
-  .kpi.dark .label, .kpi.dark .sub { color: #BDB8B0; }
-  .kpi .value { font-family: 'Instrument Serif', Georgia, serif; font-size: 2.3rem; line-height: 1.15; margin-top: 4px; }
-  .kpi .sub { font-size: .8rem; color: var(--muted); }
-  .up { color: var(--red); } .down { color: var(--green); }
+  /* metric strip: hairlines, no boxes */
+  .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--ink); border-bottom: 1px solid var(--line); }
+  .metric { padding: 18px 20px 22px 0; min-width: 0; }
+  .metric + .metric { padding-left: 20px; border-left: 1px solid var(--line); }
+  .metric .label { font-size: .84rem; color: var(--muted); }
+  .metric .value { font-size: 1.9rem; font-weight: 500; letter-spacing: -.025em; line-height: 1.15; margin-top: 8px; }
+  .metric .sub { font-size: .82rem; color: var(--muted); margin-top: 4px; }
+  .up, .metric .sub.up { color: var(--up); } .down, .metric .sub.down { color: var(--down); }
+  @media (max-width: 860px) {
+    .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .metric:nth-child(3) { padding-left: 0; border-left: 0; }
+    .metric:nth-child(n+3) { border-top: 1px solid var(--line); }
+  }
+  @media (max-width: 420px) {
+    .metrics { grid-template-columns: 1fr; }
+    .metric + .metric { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); }
+  }
 
-  section { margin-top: 34px; }
-  section > h2 { font-size: 1.05rem; font-weight: 600; margin-bottom: 4px; }
-  section > p.lead { color: var(--muted); font-size: .88rem; margin-bottom: 14px; }
+  /* sections */
+  section { padding-top: 72px; }
+  .section-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 12px 48px; align-items: end; margin-bottom: 24px; }
+  .section-head h2 { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 2rem; line-height: 1.1; letter-spacing: -.01em; }
+  .section-head p { color: var(--muted); font-size: .92rem; max-width: 58ch; }
+  @media (max-width: 760px) { .section-head { grid-template-columns: 1fr; } }
 
   /* spend */
-  .spend-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 12px; }
-  @media (max-width: 860px) { .spend-grid { grid-template-columns: 1fr; } }
-  .panel { padding: 18px; min-width: 0; }
-  .panel h3 { font-size: .9rem; font-weight: 600; margin-bottom: 12px; }
-  .bar-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; margin-bottom: 12px; font-size: .86rem; }
+  .spend-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 56px; }
+  @media (max-width: 860px) { .spend-grid { grid-template-columns: 1fr; gap: 36px; } }
+  .col-title { font-size: .9rem; font-weight: 500; padding-bottom: 10px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
+  .bar-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; padding: 11px 0; font-size: .9rem; }
   .bar-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bar-row .amt { font-variant-numeric: tabular-nums; }
-  .bar { grid-column: 1 / -1; height: 7px; background: #F0EDE8; border-radius: 4px; overflow: hidden; }
-  .bar > i { display: block; height: 100%; background: var(--text); border-radius: 4px; }
-  .riser { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid #F0EDE8; font-size: .86rem; }
+  .bar-row .amt { color: var(--ink-2); }
+  .bar-row .share { color: var(--faint); margin-left: 8px; }
+  .bar { grid-column: 1 / -1; height: 4px; background: var(--line-soft); }
+  .bar > i { display: block; height: 100%; background: var(--ink); }
+  .bar-row:first-child .bar > i { background: var(--accent); }
+  .riser { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line-soft); font-size: .9rem; }
   .riser:last-child { border-bottom: 0; }
-  .riser .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .riser .from { color: var(--muted); font-size: .78rem; }
-  .riser .amt { color: var(--red); font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .empty { color: var(--muted); font-size: .86rem; padding: 6px 0; }
+  .riser .name { min-width: 0; }
+  .riser .name div:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .riser .from { color: var(--muted); font-size: .8rem; margin-top: 2px; }
+  .riser .amt { color: var(--up); font-weight: 500; white-space: nowrap; }
+  .empty { color: var(--muted); font-size: .9rem; padding: 14px 0; }
 
-  .callout { margin: 0 0 14px; padding: 12px 16px; border-left: 3px solid var(--blue); background: var(--blue-bg); border-radius: 0 8px 8px 0; font-size: .88rem; }
+  .plan { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 18px; padding: 16px 0; margin-bottom: 8px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: .92rem; color: var(--ink-2); }
+  .plan b { font-weight: 500; color: var(--ink); white-space: nowrap; }
+  @media (max-width: 640px) { .plan { grid-template-columns: 1fr; } .tabs { mask-image: linear-gradient(90deg, #000 85%, transparent); } }
 
-  /* findings */
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-  .chip { font: inherit; font-size: .78rem; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 4px 11px; cursor: pointer; color: var(--text); }
-  .chip[aria-pressed="true"] { background: var(--text); color: #fff; border-color: var(--text); }
-  .chip .n { color: var(--faint); margin-left: 4px; }
-  .chip[aria-pressed="true"] .n { color: #BDB8B0; }
+  /* filters as text tabs */
+  .tabs { display: flex; gap: 18px; margin: 4px 0 0; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { flex: 0 0 auto; white-space: nowrap; font: inherit; font-size: .88rem; background: none; border: 0; color: var(--muted); padding: 10px 0 11px; cursor: pointer; position: relative; transition: color .2s var(--ease); }
+  .tab:hover { color: var(--ink); }
+  .tab .n { margin-left: 5px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .tab[aria-pressed="true"] { color: var(--ink); font-weight: 500; }
+  .tab[aria-pressed="true"]::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--ink); }
+
+  /* findings table */
   .table-scroll { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: .86rem; min-width: 760px; }
-  th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 500; padding: 12px 14px; border-bottom: 1px solid var(--border); background: #FBFAF8; }
-  td { padding: 13px 14px; border-bottom: 1px solid #F0EDE8; vertical-align: top; }
-  tr:last-child td { border-bottom: 0; }
-  td.rank { color: var(--faint); font-variant-numeric: tabular-nums; width: 36px; }
-  td .title { font-weight: 600; }
-  td .rid { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .76rem; background: #F3F1ED; padding: 1px 5px; border-radius: 4px; word-break: break-all; }
-  td .rname { color: var(--muted); font-size: .8rem; }
-  td .detail { color: var(--muted); font-size: .8rem; margin-top: 3px; }
-  td.saving { text-align: right; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; min-width: 820px; }
+  th { text-align: left; font-size: .8rem; color: var(--muted); font-weight: 500; padding: 14px 16px 12px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 18px 16px 18px 0; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  tbody tr { transition: background-color .2s var(--ease); }
+  tbody tr:hover { background: rgba(239, 236, 230, .55); }
+  td.rank { color: var(--faint); width: 32px; font-variant-numeric: tabular-nums; }
+  td .title { font-weight: 500; }
+  td .rid { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: .78rem; color: var(--ink-2); word-break: break-all; }
+  td .rname { color: var(--muted); font-size: .82rem; }
+  td .detail { color: var(--muted); font-size: .82rem; margin-top: 4px; max-width: 46ch; }
+  td.region { white-space: nowrap; color: var(--ink-2); }
+  td.saving { text-align: right; font-weight: 500; white-space: nowrap; }
+  td.saving .est { display: block; font-weight: 400; font-size: .74rem; color: var(--muted); }
+  td.saving .none { color: var(--faint); font-weight: 400; }
   th.right { text-align: right; }
-  .est { display: block; font-weight: 400; font-size: .7rem; color: var(--amber); }
-  .pill { display: inline-block; font-size: .74rem; padding: 1px 9px; border-radius: 999px; font-weight: 500; }
-  .pill.low { background: var(--green-bg); color: var(--green); }
-  .pill.medium { background: var(--amber-bg); color: var(--amber); }
-  .pill.high { background: var(--red-bg); color: var(--red); }
-  td.action { max-width: 260px; }
-  td.region { white-space: nowrap; }
+  td.action { max-width: 280px; color: var(--ink-2); }
+  .level { display: inline-flex; align-items: center; gap: 8px; font-size: .84rem; white-space: nowrap; }
+  .level i { display: inline-flex; gap: 2px; }
+  .level i b { width: 6px; height: 10px; background: var(--line); }
+  .level[data-level="1"] i b:nth-child(-n+1),
+  .level[data-level="2"] i b:nth-child(-n+2),
+  .level[data-level="3"] i b:nth-child(-n+3) { background: var(--ink-2); }
+  .level.risk[data-level="3"] i b { background: var(--up); }
   @media (max-width: 640px) {
     table { min-width: 0; }
     thead { display: none; }
-    tbody tr { display: flex; flex-wrap: wrap; align-items: center; padding: 12px 4px; border-bottom: 1px solid #F0EDE8; }
-    tbody td { border: 0; padding: 3px 10px; }
+    tbody tr { display: flex; flex-wrap: wrap; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--line-soft); }
+    tbody tr:hover { background: none; }
+    tbody td { border: 0; padding: 3px 0; }
     td.rank { display: none; }
-    td.finding { flex: 1 1 calc(100% - 120px); min-width: 0; order: 1; }
-    td.saving { flex: 0 0 110px; align-self: flex-start; order: 2; }
-    td.region { order: 3; color: var(--muted); font-size: .8rem; }
-    td.effort { order: 4; } td.risk { order: 5; }
-    td.effort::before { content: 'Effort '; color: var(--muted); font-size: .78rem; }
-    td.risk::before { content: 'Risk '; color: var(--muted); font-size: .78rem; }
-    td.action { order: 6; flex: 1 1 100%; max-width: none; font-size: .84rem; }
-    td.action::before { content: 'Action: '; color: var(--muted); }
+    td.finding { flex: 1 1 calc(100% - 110px); min-width: 0; order: 1; padding-right: 12px; }
+    td.saving { flex: 0 0 100px; align-self: flex-start; order: 2; }
+    td.region { order: 3; font-size: .82rem; margin-right: 16px; }
+    td.effort { order: 4; margin-right: 16px; } td.risk { order: 5; }
+    td.effort .level::before { content: 'Effort'; color: var(--muted); }
+    td.risk .level::before { content: 'Risk'; color: var(--muted); }
+    td.action { order: 6; flex: 1 1 100%; max-width: none; padding-top: 8px; }
   }
 
-  /* how it works */
-  .how { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-  @media (max-width: 860px) { .how { grid-template-columns: 1fr; } }
-  .how .panel p { color: var(--muted); font-size: .86rem; }
-  footer { margin: 40px 0 32px; color: var(--muted); font-size: .8rem; display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between; }
-  footer a { color: inherit; }
+  /* how it works: a definition list, not three cards */
+  .how { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 0 48px; }
+  .how-title { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 2rem; line-height: 1.1; letter-spacing: -.01em; margin-bottom: 20px; }
+  .how dl { grid-column: 2; }
+  .how dt { font-weight: 500; padding-top: 16px; border-top: 1px solid var(--line); }
+  .how dd { color: var(--ink-2); font-size: .92rem; padding: 4px 0 18px; max-width: 58ch; }
+  .how code { font-size: .84rem; }
+  @media (max-width: 760px) { .how { grid-template-columns: 1fr; } .how dl { grid-column: 1; } }
 
+  footer { margin: 80px 0 40px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: .84rem; display: flex; flex-wrap: wrap; gap: 6px 20px; justify-content: space-between; }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } html { scroll-behavior: auto; } }
   @media print {
-    .topbar, .chips, .how-section, footer .no-print { display: none !important; }
+    .bar, .tabs, .how-section, .skip, footer a { display: none !important; }
     body { background: #fff; }
-    .card { box-shadow: none; }
+    section { padding-top: 36px; }
+    .lead-block { padding-top: 0; }
     table { min-width: 0; }
-    tr { page-break-inside: avoid; }
+    tr { break-inside: avoid; }
   }
 </style>
 </head>
 <body>
+<a class="skip" href="#main">Skip to the report</a>
 
-<div class="topbar">
+<header class="bar">
   <div class="wrap">
-    <div class="brand">
-      <div class="mark" aria-hidden="true">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1.5 14 5v6l-6 3.5L2 11V5l6-3.5Z" stroke="#fff" stroke-width="1.5"/><circle cx="8" cy="8" r="2" fill="#fff"/></svg>
-      </div>
-      <b>Cost Optimizer</b><span>Read-only AWS cost review</span>
-    </div>
-    <div class="actions">
+    <a class="brand" href="./"><b>Cost Optimizer</b><span>Read-only AWS cost review</span></a>
+    <nav class="actions" aria-label="Report actions">
       <button class="btn print" type="button" id="printBtn">Save as PDF</button>
-      <button class="btn" type="button" id="sampleBtn" hidden>Show sample</button>
-      <label class="btn primary" for="fileInput" tabindex="0" id="openLabel">Open report file</label>
+      <button class="btn" type="button" id="sampleBtn" hidden>Back to sample</button>
+      <label class="btn primary" for="fileInput" tabindex="0" id="openLabel" role="button">Open report file</label>
       <input type="file" id="fileInput" accept=".json,application/json" hidden>
-    </div>
+    </nav>
   </div>
-</div>
+</header>
 
-<main class="wrap">
-  <header class="hero">
-    <h1>Weekly <em>cost</em> report</h1>
-    <div class="meta" id="meta"></div>
-    <div class="banner sample" id="banner" role="status"></div>
-  </header>
+<main class="wrap" id="main">
+  <div class="lead-block">
+    <div class="eyebrow" id="meta"></div>
+    <h1 class="headline" id="headline"></h1>
+    <p class="standfirst" id="standfirst"></p>
+    <p class="note" id="banner" role="status"></p>
+  </div>
 
-  <div class="kpis" id="kpis"></div>
+  <div class="metrics" id="kpis"></div>
 
-  <section id="spendSection">
-    <h2>Where the money goes</h2>
-    <p class="lead" id="spendLead"></p>
+  <section id="spendSection" aria-labelledby="spendTitle">
+    <div class="section-head">
+      <h2 id="spendTitle">Where the money goes</h2>
+      <p id="spendLead"></p>
+    </div>
     <div class="spend-grid">
-      <div class="card panel"><h3 id="topTitle">Top services</h3><div id="topServices"></div></div>
-      <div class="card panel"><h3>What went up</h3><div id="risers"></div></div>
+      <div><h3 class="col-title" id="topTitle">Top services</h3><div id="topServices"></div></div>
+      <div><h3 class="col-title">What went up</h3><div id="risers"></div></div>
     </div>
   </section>
 
-  <section>
-    <h2>Savings, biggest first</h2>
-    <p class="lead">Each item shows the monthly saving, how much work the fix is (effort) and how likely it is to affect something still in use (risk). Nothing here is changed automatically.</p>
+  <section aria-labelledby="savingsTitle">
+    <div class="section-head">
+      <h2 id="savingsTitle">Savings, biggest first</h2>
+      <p>Effort is how much work the fix takes. Risk is how likely it is to touch something still in use. Nothing here changes on its own; every fix is a decision.</p>
+    </div>
     <div id="planCallout"></div>
-    <div class="chips" id="chips" role="group" aria-label="Filter findings"></div>
-    <div class="card table-scroll">
+    <div class="tabs" id="chips" role="group" aria-label="Filter findings by check"></div>
+    <div class="table-scroll">
       <table>
-        <thead><tr><th>#</th><th>Finding</th><th>Region</th><th class="right">Saving / month</th><th>Effort</th><th>Risk</th><th>Recommended action</th></tr></thead>
+        <thead><tr><th scope="col">#</th><th scope="col">Finding</th><th scope="col">Region</th><th scope="col" class="right">Saving a month</th><th scope="col">Effort</th><th scope="col">Risk</th><th scope="col">What to do</th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
   </section>
 
-  <section class="how-section">
-    <h2>How it works</h2>
-    <p class="lead">A scheduled Lambda function scans every enabled region, reads the bill from Cost Explorer, and writes this report to a private S3 bucket.</p>
+  <section class="how-section" aria-labelledby="howTitle">
     <div class="how">
-      <div class="card panel"><h3>Read-only</h3><p>The scanner only has Describe, List and Get permissions. It cannot stop, delete or change anything.</p></div>
-      <div class="card panel"><h3>No public API</h3><p>Scans run weekly or with <code>aws lambda invoke</code>. This page never talks to AWS: it shows sample data or a report file you open, and the file stays in your browser.</p></div>
-      <div class="card panel"><h3>Priced for real</h3><p>EC2 prices come from the AWS Price List API and spend comes from Cost Explorer. Other prices use published us-east-1 rates and are marked "estimate".</p></div>
+      <h2 id="howTitle" class="how-title">How the scan works</h2>
+      <dl>
+        <dt>It only reads</dt>
+        <dd>The scanner has Describe, List and Get permissions and nothing else. It cannot stop, delete or change a resource.</dd>
+        <dt>There is no public endpoint</dt>
+        <dd>Scans run every Monday, or on demand with <code>aws lambda invoke</code>. This page never talks to AWS: it shows sample data, or a report file you open, and that file stays in your browser.</dd>
+        <dt>The prices are AWS's own</dt>
+        <dd>Spend and the forecast come from Cost Explorer, and EC2 prices from the Price List API. Anything priced from published us-east-1 rates is marked as an estimate.</dd>
+      </dl>
     </div>
   </section>
 
   <footer>
-    <span>Cost Optimizer v3 &middot; Terraform, Lambda (Python), Cost Explorer, S3, SNS, CloudFront</span>
-    <a class="no-print" href="https://github.com/cyberN3m3/AWS-Cost-Optimization-Dashboard">Source on GitHub</a>
+    <span>Cost Optimizer 3.0. Terraform, Lambda (Python), Cost Explorer, S3, SNS, CloudFront.</span>
+    <a href="https://github.com/cyberN3m3/AWS-Cost-Optimization-Dashboard">Source on GitHub</a>
   </footer>
 </main>
 
 <script>
 'use strict';
-const SAMPLE = {"version": "3.0", "sample": true, "scanned_at": "2026-10-26 08:00 UTC", "account_id": "", "regions_scanned": ["eu-west-2", "us-east-1"], "totals": {"findings": 11, "monthly_saving": 332.52, "yearly_saving": 3990.24, "savings_plan_monthly": 96.3}, "spend": {"last_month": "September 2026", "month_before": "August 2026", "total_last_month": 1846.2, "total_month_before": 1512.4, "change": 333.8, "change_pct": 22.1, "top_services": [{"service": "Amazon Elastic Compute Cloud - Compute", "cost": 812.3, "share_pct": 44.0}, {"service": "Amazon Relational Database Service", "cost": 402.1, "share_pct": 21.8}, {"service": "EC2 - Other", "cost": 236.4, "share_pct": 12.8}, {"service": "Amazon Simple Storage Service", "cost": 118.2, "share_pct": 6.4}, {"service": "AmazonCloudWatch", "cost": 96.7, "share_pct": 5.2}], "biggest_risers": [{"service": "Amazon Elastic Compute Cloud - Compute", "increase": 210.5, "from": 601.8, "to": 812.3}, {"service": "EC2 - Other", "increase": 71.2, "from": 165.2, "to": 236.4}, {"service": "AmazonCloudWatch", "increase": 38.9, "from": 57.8, "to": 96.7}], "forecast_this_month": 1902.4}, "savings_plan": {"hourly_commitment": 0.42, "monthly_saving": 96.3, "saving_pct": 21.0}, "by_check": {"idle_ec2": {"label": "Idle EC2 instances", "count": 2, "monthly_saving": 200.89}, "unattached_ebs": {"label": "Unattached EBS volumes", "count": 1, "monthly_saving": 40.0}, "idle_nat": {"label": "Idle NAT gateways", "count": 1, "monthly_saving": 32.85}, "gp2_to_gp3": {"label": "gp2 volumes to move to gp3", "count": 1, "monthly_saving": 20.0}, "idle_load_balancer": {"label": "Idle load balancers", "count": 1, "monthly_saving": 16.43}, "old_snapshot": {"label": "Old EBS snapshots", "count": 1, "monthly_saving": 12.5}, "unattached_eip": {"label": "Unattached Elastic IPs", "count": 2, "monthly_saving": 7.3}, "log_retention": {"label": "Log groups with no retention", "count": 1, "monthly_saving": 2.55}, "s3_no_lifecycle": {"label": "S3 buckets with no lifecycle rules", "count": 1, "monthly_saving": 0.0}}, "findings": [{"check": "idle_ec2", "title": "Idle EC2 instance", "resource_id": "i-0a1b2c3d4e5f60718", "resource_name": "staging-api", "region": "us-east-1", "monthly_cost": 140.16, "monthly_saving": 140.16, "saving_is_estimate": false, "effort": "Low", "risk": "Medium", "action": "Stop the instance, or terminate it after taking an AMI backup", "detail": "m5.xlarge, average CPU 0.62% over 7 days"}, {"check": "idle_ec2", "title": "Idle EC2 instance", "resource_id": "i-07c9e1f2a3b4c5d6e", "resource_name": "reporting-worker", "region": "us-east-1", "monthly_cost": 121.47, "monthly_saving": 60.73, "saving_is_estimate": false, "effort": "Medium", "risk": "Medium", "action": "Downsize to t3.large", "detail": "t3.xlarge, average CPU 3.10% over 7 days"}, {"check": "unattached_ebs", "title": "Unattached EBS volume", "resource_id": "vol-0f3e2d1c0b9a87654", "resource_name": "old-db-data", "region": "us-east-1", "monthly_cost": 40.0, "monthly_saving": 40.0, "saving_is_estimate": true, "effort": "Low", "risk": "Low", "action": "Take a snapshot, then delete the volume", "detail": "500 GB gp3, created 2025-11-03"}, {"check": "idle_nat", "title": "Idle NAT gateway", "resource_id": "nat-0d4c3b2a1908f7e6d", "resource_name": "", "region": "eu-west-2", "monthly_cost": 32.85, "monthly_saving": 32.85, "saving_is_estimate": true, "effort": "Medium", "risk": "Medium", "action": "Check the route tables that use it, then delete it (or replace it with VPC endpoints)", "detail": "Sent 18,204 bytes in 7 days, in vpc-0a12b34c56d78e90f"}, {"check": "gp2_to_gp3", "title": "gp2 volume that can move to gp3", "resource_id": "vol-0a9b8c7d6e5f4a3b2", "resource_name": "prod-db-volume", "region": "us-east-1", "monthly_cost": 100.0, "monthly_saving": 20.0, "saving_is_estimate": true, "effort": "Low", "risk": "Low", "action": "Change the volume type to gp3 (no downtime, about 20% cheaper)", "detail": "1000 GB gp2, state in-use"}, {"check": "idle_load_balancer", "title": "Idle application load balancer", "resource_id": "old-marketing-alb", "resource_name": "", "region": "us-east-1", "monthly_cost": 16.43, "monthly_saving": 16.43, "saving_is_estimate": true, "effort": "Low", "risk": "Medium", "action": "Confirm nothing points at it (DNS, other services), then delete it", "detail": "no healthy targets; cost shown is the hourly charge only"}, {"check": "old_snapshot", "title": "Old EBS snapshot", "resource_id": "snap-0c1d2e3f4a5b6c7d8", "resource_name": "pre-migration-backup", "region": "us-east-1", "monthly_cost": 12.5, "monthly_saving": 12.5, "saving_is_estimate": true, "effort": "Low", "risk": "Medium", "action": "Confirm it is not needed for recovery, then delete it or move it to the archive tier", "detail": "250 GB, 412 days old (cost shown is the most it can be)"}, {"check": "unattached_eip", "title": "Unattached Elastic IP", "resource_id": "eipalloc-0b1c2d3e4f5a6b7c8", "resource_name": "", "region": "us-east-1", "monthly_cost": 3.65, "monthly_saving": 3.65, "saving_is_estimate": false, "effort": "Low", "risk": "Low", "action": "Release the address if nothing needs this exact IP", "detail": "54.210.17.88 is not attached; AWS charges for every public IPv4 address"}, {"check": "unattached_eip", "title": "Unattached Elastic IP", "resource_id": "eipalloc-0e9d8c7b6a5f4e3d2", "resource_name": "", "region": "eu-west-2", "monthly_cost": 3.65, "monthly_saving": 3.65, "saving_is_estimate": false, "effort": "Low", "risk": "Low", "action": "Release the address if nothing needs this exact IP", "detail": "18.133.40.12 is not attached; AWS charges for every public IPv4 address"}, {"check": "log_retention", "title": "Log group that keeps data forever", "resource_id": "/aws/lambda/image-resizer", "resource_name": "", "region": "us-east-1", "monthly_cost": 2.55, "monthly_saving": 2.55, "saving_is_estimate": true, "effort": "Low", "risk": "Low", "action": "Set a retention period (for example 30 or 90 days)", "detail": "85.00 GB stored with no expiry; saving shown is the most it can be"}, {"check": "s3_no_lifecycle", "title": "S3 bucket with no lifecycle rules", "resource_id": "acme-app-uploads", "resource_name": "", "region": "global", "monthly_cost": 0, "monthly_saving": 0, "saving_is_estimate": true, "effort": "Low", "risk": "Low", "action": "Add lifecycle rules: move old objects to cheaper storage and expire what is not needed", "detail": "Storage grows with no limit; the saving depends on how much data is old"}]};
+const SAMPLE = {"version": "3.0", "sample": true, "scanned_at": "2026-10-26 08:00 UTC", "account_id": "", "regions_scanned": ["eu-west-2", "us-east-1"], "totals": {"findings": 11, "monthly_saving": 332.52, "yearly_saving": 3990.24, "savings_plan_monthly": 96.3}, "spend": {"last_month": "September 2026", "month_before": "August 2026", "total_last_month": 1846.2, "total_month_before": 1512.4, "change": 333.8, "change_pct": 22.1, "top_services": [{"service": "Amazon Elastic Compute Cloud - Compute", "cost": 812.3, "share_pct": 44.0}, {"service": "Amazon Relational Database Service", "cost": 402.1, "share_pct": 21.8}, {"service": "EC2 - Other", "cost": 236.4, "share_pct": 12.8}, {"service": "Amazon Simple Storage Service", "cost": 118.2, "share_pct": 6.4}, {"service": "AmazonCloudWatch", "cost": 96.7, "share_pct": 5.2}], "biggest_risers": [{"service": "Amazon Elastic Compute Cloud - Compute", "increase": 210.5, "from": 601.8, "to": 812.3}, {"service": "EC2 - Other", "increase": 71.2, "from": 165.2, "to": 236.4}, {"service": "AmazonCloudWatch", "increase": 38.9, "from": 57.8, "to": 96.7}], "forecast_this_month": 1902.4}, "savings_plan": {"hourly_commitment": 0.42, "monthly_saving": 96.3, "saving_pct": 21.0}, "by_check": {"idle_ec2": {"label": "Idle EC2 instances", "count": 2, "monthly_saving": 200.89}, "unattached_ebs": {"label": "Unattached EBS volumes", "count": 1, "monthly_saving": 40.0}, "idle_nat": {"label": "Idle NAT gateways", "count": 1, "monthly_saving": 32.85}, "gp2_to_gp3": {"label": "gp2 volumes to move to gp3", "count": 1, "monthly_saving": 20.0}, "idle_load_balancer": {"label": "Idle load balancers", "count": 1, "monthly_saving": 16.43}, "old_snapshot": {"label": "Old EBS snapshots", "count": 1, "monthly_saving": 12.5}, "unattached_eip": {"label": "Unattached Elastic IPs", "count": 2, "monthly_saving": 7.3}, "log_retention": {"label": "Log groups with no retention", "count": 1, "monthly_saving": 2.55}, "s3_no_lifecycle": {"label": "S3 buckets with no lifecycle rules", "count": 1, "monthly_saving": 0.0}}, "findings": [{"check": "idle_ec2", "title": "Idle EC2 instance", "resource_id": "i-0a1b2c3d4e5f60718", "resource_name": "staging-api", "region": "us-east-1", "monthly_cost": 140.16, "monthly_saving": 140.16, "saving_is_estimate": false, "effort": "Low", "risk": "Medium", "action": "Stop the instance, or terminate it after taking an AMI backup", "detail": "m5.xlarge, average CPU 0.62% over 7 days"}, {"check": "idle_ec2", "title": "Idle EC2 instance", "resource_id": "i-07c9e1f2a3b4c5d6e", "resource_name": "reporting-worker", "region": "us-east-1", "monthly_cost": 121.47, "monthly_saving": 60.73, "saving_is_estimate": false, "effort": "Medium", "risk": "Medium", "action": "Downsize to t3.large", "detail": "t3.xlarge, average CPU 3.10% over 7 days"}, {"check": "unattached_ebs", "title": "Unattached EBS volume", "resource_id": "vol-0f3e2d1c0b9a87654", "resource_name": "old-db-data", "region": "us-east-1", "monthly_cost": 40.0, "monthly_saving": 40.0, "saving_is_estimate": true, "effort": "Low", "risk": "Low", "action": "Take a snapshot, then delete the volume", "detail": "500 GB gp3, created 2025-11-03"}, {"check": "idle_nat", "title": "Idle NAT gateway", "resource_id": "nat-0d4c3b2a1908f7e6d", "resource_name": "", "region": "eu-west-2", "monthly_cost": 32.85, "monthly_saving": 32.85, "saving_is_estimate": true, "effort": "Medium", "risk": "Medium", "action": "Check the route tables that use it, then delete it (or replace it with VPC endpoints)", "detail": "Sent 18,204 bytes in 7 days, in vpc-0a12b34c56d78e90f"}, {"check": "gp2_to_gp3", "title": "gp2 volume that can move to gp3", "resource_id": "vol-0a9b8c7d6e5f4a3b2", "resource_name": "prod-db-volume", "region": "us-east-1", "monthly_cost": 100.0, "monthly_saving": 20.0, "saving_is_estimate": true, "effort": "Low", "risk": "Low", "action": "Change the volume type to gp3 (no downtime, about 20% cheaper)", "detail": "1000 GB gp2, state in-use"}, {"check": "idle_load_balancer", "title": "Idle application load balancer", "resource_id": "old-marketing-alb", "resource_name": "", "region": "us-east-1", "monthly_cost": 16.43, "monthly_saving": 16.43, "saving_is_estimate": true, "effort": "Low", "risk": "Medium", "action": "Confirm nothing points at it (DNS, other services), then delete it", "detail": "no healthy targets; cost shown is the hourly charge only"}, {"check": "old_snapshot", "title": "Old EBS snapshot", "resource_id": "snap-0c1d2e3f4a5b6c7d8", "resource_name": "pre-migration-backup", "region": "us-east-1", "monthly_cost": 12.5, "monthly_saving": 12.5, "saving_is_estimate": true, "effort": "Low", "risk": "Medium", "action": "Confirm it is not needed for recovery, then delete it or move it to the archive tier", "detail": "250 GB, 412 days old (cost shown is the most it can be)"}, {"check": "unattached_eip", "title": "Unattached Elastic IP", "resource_id": "eipalloc-0b1c2d3e4f5a6b7c8", "resource_name": "", "region": "us-east-1", "monthly_cost": 3.65, "monthly_saving": 3.65, "saving_is_estimate": false, "effort": "Low", "risk": "Low", "action": "Release the address if nothing needs this exact IP", "detail": "54.210.17.88 is not attached; AWS charges for every public IPv4 address"}, {"check": "unattached_eip", "title": "Unattached Elastic IP", "resource_id": "eipalloc-0e9d8c7b6a5f4e3d2", "resource_name": "", "region": "eu-west-2", "monthly_cost": 3.65, "monthly_saving": 3.65, "saving_is_estimate": false, "effort": "Low", "risk": "Low", "action": "Release the address if nothing needs this exact IP", "detail": "18.133.40.12 is not attached; AWS charges for every public IPv4 address"}, {"check": "log_retention", "title": "Log group that keeps data forever", "resource_id": "/aws/lambda/image-resizer", "resource_name": "", "region": "us-east-1", "monthly_cost": 2.55, "monthly_saving": 2.55, "saving_is_estimate": true, "effort": "Low", "risk": "Low", "action": "Set a retention period (for example 30 or 90 days)", "detail": "85.00 GB stored with no expiry; saving shown is the most it can be"}, {"check": "s3_no_lifecycle", "title": "S3 bucket with no lifecycle rules", "resource_id": "tallybook-user-uploads", "resource_name": "", "region": "global", "monthly_cost": 0, "monthly_saving": 0, "saving_is_estimate": true, "effort": "Low", "risk": "Low", "action": "Add lifecycle rules: move old objects to cheaper storage and expire what is not needed", "detail": "Storage grows with no limit; the saving depends on how much data is old"}]};
 
 const LABELS = {
-  idle_ec2: 'Idle EC2', unattached_ebs: 'Unattached EBS', gp2_to_gp3: 'gp2 to gp3',
+  idle_ec2: 'Idle EC2', unattached_ebs: 'Unattached volumes', gp2_to_gp3: 'gp2 to gp3',
   old_snapshot: 'Old snapshots', unattached_eip: 'Elastic IPs', idle_nat: 'NAT gateways',
   idle_load_balancer: 'Load balancers', log_retention: 'Log retention', s3_no_lifecycle: 'S3 lifecycle'
 };
+const LEVEL = { Low: 1, Medium: 2, High: 3 };
 const money = v => '$' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const moneyShort = v => Number(v || 0) < 100 ? money(v) : '$' + Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
 const $ = id => document.getElementById(id);
@@ -229,6 +288,12 @@ function el(tag, attrs, ...children) {
   return node;
 }
 
+function scanDate(report) {
+  const d = new Date((report.scanned_at || '').replace(' UTC', 'Z').replace(' ', 'T'));
+  return isNaN(d) ? (report.scanned_at || 'an unknown date')
+    : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 let current = SAMPLE;
 let filter = 'all';
 
@@ -236,63 +301,73 @@ function render(report, source) {
   current = report;
   const t = report.totals || {};
   const spend = report.spend;
+  const plan = report.savings_plan;
 
-  const meta = $('meta');
-  meta.replaceChildren(...[
-    el('span', {}, 'Scanned ' + (report.scanned_at || 'unknown')),
+  $('meta').replaceChildren(...[
+    el('span', {}, 'Scanned ' + scanDate(report)),
     el('span', {}, (report.regions_scanned || []).length + ' regions'),
     report.account_id ? el('span', {}, 'Account ' + report.account_id) : null,
-    el('span', {}, 'Read-only scan, nothing was changed')
   ].filter(Boolean));
+
+  const headline = $('headline');
+  if (t.monthly_saving > 0) {
+    headline.replaceChildren(el('span', { class: 'figure' }, moneyShort(t.monthly_saving)), ' a month could be saved');
+    $('standfirst').textContent = (t.findings || 0) + ' findings, ranked below by how much each one is worth. That is ' +
+      money(t.yearly_saving) + ' a year if every fix goes ahead.';
+  } else {
+    headline.textContent = 'Nothing costly to fix this week';
+    $('standfirst').textContent = (t.findings || 0) + ' findings to tidy up, none with a measurable monthly cost. They are listed below so they stay that way.';
+  }
 
   const banner = $('banner');
   if (report.sample) {
-    banner.className = 'banner sample';
-    banner.replaceChildren(el('div', {}, el('strong', {}, 'Sample data. '),
-      'These findings are made up to show what the scanner reports for a typical small startup account. Run a scan, download its report.json and open it here. The file is read in your browser and never uploaded.'));
+    banner.className = 'note';
+    banner.replaceChildren(el('span', {}, el('strong', {}, 'Sample data.'), ' ',
+      'These findings are invented to show what a scan reports for a small startup account. Open a real report.json to see yours; it is read in this browser and never uploaded.'));
   } else {
-    banner.className = 'banner loaded';
-    banner.replaceChildren(el('div', {}, el('strong', {}, 'Showing your report. '), (source || 'report.json') + ' was read in this browser and was not uploaded anywhere.'));
+    banner.className = 'note ok';
+    banner.replaceChildren(el('span', {}, el('strong', {}, 'Your report.'), ' ', (source || 'report.json') + ' was read in this browser and was not uploaded anywhere.'));
   }
   $('sampleBtn').hidden = !!report.sample;
 
   const change = spend && spend.change_pct;
-  const changeText = spend ? (change === null || change === undefined ? 'no earlier month to compare'
-    : (spend.change > 0 ? '↑ ' : '↓ ') + Math.abs(change) + '% on ' + spend.month_before) : 'Cost Explorer not enabled';
-  const kpis = [
-    { cls: 'kpi dark', label: 'Possible saving', value: moneyShort(t.monthly_saving) + '/mo', sub: money(t.yearly_saving) + ' a year' },
-    { cls: 'kpi', label: 'Findings', value: String(t.findings || 0), sub: 'ranked by saving below' },
-    { cls: 'kpi', label: spend ? 'Spend, ' + spend.last_month : 'Spend last month', value: spend ? moneyShort(spend.total_last_month) : '–',
-      sub: changeText, subCls: spend && spend.change > 0 ? 'up' : 'down' },
-    { cls: 'kpi', label: 'Forecast this month', value: spend && spend.forecast_this_month != null ? moneyShort(spend.forecast_this_month) : '–',
-      sub: 'AWS Cost Explorer forecast' },
+  const changeText = spend ? (change === null || change === undefined ? 'No earlier month to compare'
+    : (spend.change > 0 ? 'Up ' : 'Down ') + Math.abs(change) + '% on ' + spend.month_before) : 'Turn on Cost Explorer to see spend';
+  const metrics = [
+    { label: 'Spend in ' + (spend ? spend.last_month : 'the last month'), value: spend ? moneyShort(spend.total_last_month) : 'Not available',
+      sub: changeText, subCls: spend && change != null ? (spend.change > 0 ? 'up' : 'down') : '' },
+    { label: 'Forecast for this month', value: spend && spend.forecast_this_month != null ? moneyShort(spend.forecast_this_month) : 'Not available',
+      sub: 'Cost Explorer forecast' },
+    { label: 'Findings', value: String(t.findings || 0), sub: Object.keys(report.by_check || {}).length + ' kinds of waste' },
+    { label: 'Savings Plan', value: plan ? moneyShort(plan.monthly_saving) : 'None advised',
+      sub: plan ? 'a month, if AWS usage stays steady' : 'Usage too low or too uneven' },
   ];
-  $('kpis').replaceChildren(...kpis.map(k => el('div', { class: 'card ' + k.cls },
-    el('div', { class: 'label' }, k.label), el('div', { class: 'value' }, k.value),
-    el('div', { class: 'sub ' + (k.subCls || '') }, k.sub))));
+  $('kpis').replaceChildren(...metrics.map(m => el('div', { class: 'metric' },
+    el('div', { class: 'label' }, m.label), el('div', { class: 'value' }, m.value),
+    el('div', { class: 'sub ' + (m.subCls || '') }, m.sub))));
 
   const section = $('spendSection');
   section.hidden = !spend;
   if (spend) {
-    $('spendLead').textContent = 'From Cost Explorer: ' + money(spend.total_last_month) + ' in ' + spend.last_month +
-      ' against ' + money(spend.total_month_before) + ' in ' + spend.month_before + '.';
-    $('topTitle').textContent = 'Top services, ' + spend.last_month;
-    const max = Math.max(...spend.top_services.map(s => s.cost), 1);
+    $('spendLead').textContent = money(spend.total_last_month) + ' in ' + spend.last_month + ', against ' +
+      money(spend.total_month_before) + ' in ' + spend.month_before + '. Source: AWS Cost Explorer.';
+    $('topTitle').textContent = 'Top services in ' + spend.last_month;
+    const max = Math.max(...spend.top_services.map(s => s.cost), 0.01);
     $('topServices').replaceChildren(...spend.top_services.map(s => el('div', { class: 'bar-row' },
       el('span', { class: 'name', title: s.service }, s.service),
-      el('span', { class: 'amt' }, money(s.cost) + ' · ' + s.share_pct + '%'),
-      el('div', { class: 'bar' }, el('i', { style: 'width:' + (s.cost / max * 100).toFixed(1) + '%' })))));
+      el('span', { class: 'amt' }, money(s.cost), el('span', { class: 'share' }, s.share_pct + '%')),
+      el('div', { class: 'bar', 'aria-hidden': 'true' }, el('i', { style: 'width:' + (s.cost / max * 100).toFixed(1) + '%' })))));
     const risers = spend.biggest_risers || [];
     $('risers').replaceChildren(...(risers.length ? risers.map(r => el('div', { class: 'riser' },
-      el('div', { class: 'name' }, el('div', { title: r.service }, r.service), el('div', { class: 'from' }, money(r.from) + ' → ' + money(r.to))),
+      el('div', { class: 'name' }, el('div', { title: r.service }, r.service), el('div', { class: 'from' }, money(r.from) + ' to ' + money(r.to))),
       el('div', { class: 'amt' }, '+' + money(r.increase))))
-      : [el('div', { class: 'empty' }, 'No service cost more than the month before.')]));
+      : [el('p', { class: 'empty' }, 'No service cost more than it did the month before.')]));
   }
 
-  const plan = report.savings_plan;
-  $('planCallout').replaceChildren(plan ? el('p', { class: 'callout' },
-    'AWS estimates a 1-year Compute Savings Plan of ' + money(plan.hourly_commitment) + '/hour would save about ',
-    el('strong', {}, money(plan.monthly_saving) + ' a month'), ' (' + plan.saving_pct + '%). Only commit if this usage will continue for a year.') : '');
+  $('planCallout').replaceChildren(plan ? el('div', { class: 'plan' },
+    el('b', {}, 'Savings Plan'),
+    el('span', {}, 'AWS estimates a 1-year Compute Savings Plan of ' + money(plan.hourly_commitment) + ' an hour would save about ' +
+      money(plan.monthly_saving) + ' a month (' + plan.saving_pct + '%). Commit only if this usage will last a year.')) : '');
 
   filter = 'all';
   renderChips();
@@ -303,12 +378,17 @@ function renderChips() {
   const counts = {};
   for (const f of current.findings || []) counts[f.check] = (counts[f.check] || 0) + 1;
   const make = (key, label, n) => {
-    const b = el('button', { class: 'chip', type: 'button', 'aria-pressed': String(filter === key) }, label, el('span', { class: 'n' }, n));
+    const b = el('button', { class: 'tab', type: 'button', 'aria-pressed': String(filter === key) }, label, el('span', { class: 'n' }, n));
     b.addEventListener('click', () => { filter = key; renderChips(); renderRows(); });
     return b;
   };
   $('chips').replaceChildren(make('all', 'All', (current.findings || []).length),
     ...Object.keys(counts).map(k => make(k, LABELS[k] || k, counts[k])));
+}
+
+function level(kind, value) {
+  return el('span', { class: 'level ' + kind, 'data-level': String(LEVEL[value] || 0), title: kind[0].toUpperCase() + kind.slice(1) + ': ' + value },
+    el('i', { 'aria-hidden': 'true' }, el('b'), el('b'), el('b')), value);
 }
 
 function renderRows() {
@@ -321,19 +401,20 @@ function renderRows() {
     el('td', { class: 'rank' }, i + 1),
     el('td', { class: 'finding' },
       el('div', { class: 'title' }, f.title),
-      el('div', {}, el('span', { class: 'rid' }, f.resource_id), f.resource_name ? el('span', { class: 'rname' }, ' · ' + f.resource_name) : null),
+      el('div', {}, el('span', { class: 'rid' }, f.resource_id), f.resource_name ? el('span', { class: 'rname' }, '  ' + f.resource_name) : null),
       el('div', { class: 'detail' }, f.detail)),
     el('td', { class: 'region' }, f.region),
-    el('td', { class: 'saving' }, f.monthly_saving ? money(f.monthly_saving) : 'Review', f.saving_is_estimate && f.monthly_saving ? el('span', { class: 'est' }, 'estimate') : null),
-    el('td', { class: 'effort' }, el('span', { class: 'pill ' + String(f.effort).toLowerCase() }, f.effort)),
-    el('td', { class: 'risk' }, el('span', { class: 'pill ' + String(f.risk).toLowerCase() }, f.risk)),
+    el('td', { class: 'saving' }, f.monthly_saving ? money(f.monthly_saving) : el('span', { class: 'none' }, 'No estimate'),
+      f.saving_is_estimate && f.monthly_saving ? el('span', { class: 'est' }, 'estimate') : null),
+    el('td', { class: 'effort' }, level('effort', f.effort)),
+    el('td', { class: 'risk' }, level('risk', f.risk)),
     el('td', { class: 'action' }, f.action))));
 }
 
 function showError(message) {
   const banner = $('banner');
-  banner.className = 'banner error';
-  banner.replaceChildren(el('div', {}, el('strong', {}, 'Could not open that file. '), message));
+  banner.className = 'note error';
+  banner.replaceChildren(el('span', {}, el('strong', {}, 'That file could not be opened.'), ' ', message));
 }
 
 $('fileInput').addEventListener('change', e => {
