@@ -1,0 +1,3 @@
+boto3==1.35.49
+moto[ec2,s3,sns,cloudwatch,elbv2,logs,ce,sts]==5.2.4
+pytest==9.1.1
