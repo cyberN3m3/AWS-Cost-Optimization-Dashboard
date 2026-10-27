@@ -1,4 +1,4 @@
-# AWS Cost Optimization Dashboard
+# CostPatrol: AWS cost optimization dashboard
 
 ![Python](https://img.shields.io/badge/Python-3.12-blue?style=flat-square&logo=python&logoColor=white)
 ![Terraform](https://img.shields.io/badge/Terraform-≥1.5-purple?style=flat-square&logo=terraform&logoColor=white)

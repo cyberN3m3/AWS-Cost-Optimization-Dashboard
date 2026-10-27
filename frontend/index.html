@@ -3,359 +3,613 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cost Optimizer: AWS cost report</title>
-<meta name="description" content="Read-only weekly scan for wasted AWS spend, ranked by monthly saving.">
+<title>CostPatrol: tickets for everything left running in your AWS account</title>
+<meta name="description" content="CostPatrol checks your AWS account every Monday and writes a ticket for everything you pay for but don't use, with what it costs you each month.">
+<meta property="og:title" content="CostPatrol">
+<meta property="og:description" content="A ticket for everything left running in your AWS account, with what it costs you each month.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#06525c">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2306525c'/%3E%3Cpath d='M8 8h16v16l-3-2-2.5 2-2.5-2-2.5 2L11 22l-3 2z' fill='%23f7f9f8'/%3E%3Cpath d='M12 13h8M12 17h5' stroke='%2306525c' stroke-width='2'/%3E%3C/svg%3E">
+<script>document.documentElement.classList.add('js')</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap" rel="stylesheet">
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --bg: #F7F5F2; --surface: #FFFFFF; --border: #E6E2DC; --text: #1C1B18;
-    --muted: #6F6B65; --faint: #A9A49C; --accent: #D4500E; --accent-bg: #FEF0E9;
-    --green: #1A7F4B; --green-bg: #EAF7EF; --amber: #8A5A06; --amber-bg: #FDF4E3;
-    --red: #B42318; --red-bg: #FDECEA; --blue: #2E4FA5; --blue-bg: #EEF3FF;
-    --shadow: 0 1px 2px rgba(28,27,24,.04), 0 2px 10px rgba(28,27,24,.05);
-    --radius: 12px;
-  }
-  html { font-size: 15px; -webkit-font-smoothing: antialiased; }
-  body { font-family: 'Geist', 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.55; }
-  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
-  @media (max-width: 640px) { .wrap { padding: 0 16px; } }
+:root {
+  --bg: #f7f9f8;
+  --surface: #ebf0ee;
+  --ink: #06525c;
+  --muted: #2f737d;
+  --accent: #06525c;
+  --accent-strong: #04434b;
+  --accent-ink: #f7f9f8;
+  --field-1: #06525c;
+  --field-1-ink: #f7f9f8;
+  --field-1-soft: #b9d3d1;
 
-  /* top bar */
-  .topbar { position: sticky; top: 0; z-index: 10; background: rgba(247,245,242,.94); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
-  .topbar .wrap { height: 58px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
-  .mark { width: 28px; height: 28px; border-radius: 7px; background: var(--text); display: grid; place-items: center; flex-shrink: 0; }
-  .brand b { font-weight: 600; font-size: .9rem; white-space: nowrap; }
-  .brand span { color: var(--muted); font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .actions { display: flex; gap: 8px; align-items: center; }
-  .btn { font: inherit; font-size: .82rem; font-weight: 500; border-radius: 8px; padding: 7px 13px; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text); white-space: nowrap; }
-  .btn:hover { border-color: #CDC9C2; }
-  .btn.primary { background: var(--text); color: #fff; border-color: var(--text); }
-  .btn:focus-visible, .chip:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-  @media (max-width: 640px) { .brand span, .btn.print { display: none; } }
+  --step-small: clamp(0.8125rem, 0.79rem + 0.1vw, 0.875rem);
+  --step-body: clamp(1.0625rem, 1rem + 0.25vw, 1.1875rem);
+  --step-lead: clamp(1.25rem, 1.1rem + 0.7vw, 1.625rem);
+  --step-head: clamp(2.5rem, 1.2rem + 5vw, 5.5rem);
+  --step-shout: clamp(6rem, min(18vw, 36svh), 19rem);
 
-  /* header */
-  header.hero { padding: 40px 0 8px; }
-  .hero h1 { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: clamp(2rem, 4.6vw, 3rem); line-height: 1.1; letter-spacing: -.01em; }
-  .hero h1 em { color: var(--accent); }
-  .meta { color: var(--muted); font-size: .86rem; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
-  .banner { margin-top: 18px; border-radius: 10px; padding: 12px 16px; font-size: .88rem; display: flex; gap: 10px; align-items: flex-start; }
-  .banner.sample { background: var(--amber-bg); color: #5F3F05; border: 1px solid #F1DDB4; }
-  .banner.loaded { background: var(--green-bg); color: #145C37; border: 1px solid #C6E7D3; }
-  .banner.error { background: var(--red-bg); color: var(--red); border: 1px solid #F5C6C1; }
-  .banner strong { font-weight: 600; }
+  --m: clamp(16px, 2.2vw, 32px);
+  --gap: clamp(120px, 14vw, 200px);
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+  --t-press: 120ms;
+  --t-hover: 180ms;
+  --z-nav: 20;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; scroll-padding-top: 72px; }
+body { font-family: 'Archivo', 'Helvetica Neue', Arial, sans-serif; font-size: var(--step-body); line-height: 1.5; color: var(--ink); background: var(--bg); font-stretch: 100%; }
+img, svg { display: block; max-width: 100%; }
+a { color: inherit; }
+button, input, label { font: inherit; color: inherit; }
+:focus-visible { outline: 3px solid currentColor; outline-offset: 3px; }
+::selection { background: var(--ink); color: var(--bg); }
+.shout { font-weight: 800; font-stretch: 62%; text-transform: uppercase; line-height: .86; letter-spacing: -.01em; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.num { font-variant-numeric: tabular-nums; }
 
-  /* KPI cards */
-  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 22px 0 8px; }
-  @media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  @media (max-width: 460px) { .kpis { grid-template-columns: 1fr; } }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
-  .kpi { padding: 16px 18px; min-width: 0; }
-  .kpi.dark { background: var(--text); color: #fff; border-color: var(--text); }
-  .kpi .label { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 500; }
-  .kpi.dark .label, .kpi.dark .sub { color: #BDB8B0; }
-  .kpi .value { font-family: 'Instrument Serif', Georgia, serif; font-size: 2.3rem; line-height: 1.15; margin-top: 4px; }
-  .kpi .sub { font-size: .8rem; color: var(--muted); }
-  .up { color: var(--red); } .down { color: var(--green); }
+/* buttons: one shape, square corners */
+.button { display: inline-flex; align-items: center; gap: 10px; padding: 18px 26px; background: var(--accent); color: var(--accent-ink); font-weight: 500; text-decoration: none; border: 0; cursor: pointer; transition: transform var(--t-press) var(--ease-out), background-color var(--t-hover) ease; }
+.button:active { transform: scale(.97); }
+@media (hover: hover) and (pointer: fine) { .button:hover { background: var(--accent-strong); } }
+.link { text-decoration: underline; text-decoration-color: transparent; text-underline-offset: .2em; text-decoration-thickness: .07em; transition: text-decoration-color var(--t-hover) ease; }
+@media (hover: hover) and (pointer: fine) { .link:hover { text-decoration-color: currentColor; } }
 
-  section { margin-top: 34px; }
-  section > h2 { font-size: 1.05rem; font-weight: 600; margin-bottom: 4px; }
-  section > p.lead { color: var(--muted); font-size: .88rem; margin-bottom: 14px; }
+/* nav */
+.nav { position: absolute; inset: 0 0 auto 0; z-index: var(--z-nav); display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 20px var(--m); color: var(--field-1-ink); }
+.wordmark { font-weight: 800; font-stretch: 62%; text-transform: uppercase; font-size: 1.6rem; letter-spacing: .01em; text-decoration: none; line-height: 1; }
+.nav ul { list-style: none; display: flex; gap: 28px; align-items: center; }
+.nav .open { padding: 12px 18px; background: var(--field-1-ink); color: var(--ink); cursor: pointer; white-space: nowrap; display: inline-block; transition: background-color var(--t-hover) ease; }
+.nav .open:active { transform: scale(.97); }
+@media (hover: hover) and (pointer: fine) { .nav .open:hover { background: var(--field-1-soft); } }
+@media (max-width: 860px) { .nav .hide-sm { display: none; } }
 
-  /* spend */
-  .spend-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 12px; }
-  @media (max-width: 860px) { .spend-grid { grid-template-columns: 1fr; } }
-  .panel { padding: 18px; min-width: 0; }
-  .panel h3 { font-size: .9rem; font-weight: 600; margin-bottom: 12px; }
-  .bar-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; margin-bottom: 12px; font-size: .86rem; }
-  .bar-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bar-row .amt { font-variant-numeric: tabular-nums; }
-  .bar { grid-column: 1 / -1; height: 7px; background: #F0EDE8; border-radius: 4px; overflow: hidden; }
-  .bar > i { display: block; height: 100%; background: var(--text); border-radius: 4px; }
-  .riser { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid #F0EDE8; font-size: .86rem; }
-  .riser:last-child { border-bottom: 0; }
-  .riser .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .riser .from { color: var(--muted); font-size: .78rem; }
-  .riser .amt { color: var(--red); font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .empty { color: var(--muted); font-size: .86rem; padding: 6px 0; }
+/* hero: teal field, paper band, ticket on the seam */
+.hero { position: relative; min-height: 100svh; display: grid; grid-template-rows: 82fr 18fr; overflow: clip; }
+.hero-field { background: var(--field-1); color: var(--field-1-ink); padding: 0 var(--m); position: relative; }
+.hero h1 { font-size: var(--step-shout); padding-top: max(15svh, 104px); position: relative; z-index: 1; }
+.hero h1 span { display: block; }
+.hero-band { background: var(--surface); padding: 26px var(--m); display: flex; align-items: center; gap: 40px; }
+.hero-band p { font-size: var(--step-lead); line-height: 1.3; max-width: 34ch; }
+.hero-band strong { font-weight: 600; }
+.hero-ticket { position: absolute; right: 8vw; bottom: -96px; width: min(31vw, 460px); z-index: 2; transform: rotate(5deg); }
+@media (max-width: 760px) {
+  .hero { display: flex; flex-direction: column; }
+  .hero-field { flex: 1; display: flex; flex-direction: column; padding-bottom: 0; }
+  .hero h1 { font-size: 26vw; padding-top: 92px; }
+  .hero-ticket { position: relative; right: auto; bottom: auto; width: min(76vw, 340px); margin: 28px 2vw -88px auto; transform: rotate(4deg); }
+  .hero-band { flex-direction: column; align-items: stretch; gap: 20px; padding-top: 112px; padding-bottom: 28px; }
+  .hero-band .button { justify-content: center; }
+}
 
-  .callout { margin: 0 0 14px; padding: 12px 16px; border-left: 3px solid var(--blue); background: var(--blue-bg); border-radius: 0 8px 8px 0; font-size: .88rem; }
+/* the ticket: a piece of the product, its own conventions */
+[data-ui].ticket { --t-ink: #06525c; background: #ffffff; color: var(--t-ink); font-size: 15px; line-height: 1.35; position: relative; padding: 0 0 18px; clip-path: polygon(0 0, 100% 0, 100.0% calc(100% - 8px), 97.5% 100%, 95.0% calc(100% - 8px), 92.5% 100%, 90.0% calc(100% - 8px), 87.5% 100%, 85.0% calc(100% - 8px), 82.5% 100%, 80.0% calc(100% - 8px), 77.5% 100%, 75.0% calc(100% - 8px), 72.5% 100%, 70.0% calc(100% - 8px), 67.5% 100%, 65.0% calc(100% - 8px), 62.5% 100%, 60.0% calc(100% - 8px), 57.5% 100%, 55.0% calc(100% - 8px), 52.5% 100%, 50.0% calc(100% - 8px), 47.5% 100%, 45.0% calc(100% - 8px), 42.5% 100%, 40.0% calc(100% - 8px), 37.5% 100%, 35.0% calc(100% - 8px), 32.5% 100%, 30.0% calc(100% - 8px), 27.5% 100%, 25.0% calc(100% - 8px), 22.5% 100%, 20.0% calc(100% - 8px), 17.5% 100%, 15.0% calc(100% - 8px), 12.5% 100%, 10.0% calc(100% - 8px), 7.5% 100%, 5.0% calc(100% - 8px), 2.5% 100%, 0.0% calc(100% - 8px)); }
+[data-ui].ticket .t-top { background: var(--t-ink); color: #ffffff; padding: 14px 18px 12px; display: flex; justify-content: space-between; align-items: baseline; }
+[data-ui].ticket .t-brand { font-weight: 800; font-stretch: 62%; text-transform: uppercase; font-size: 22px; letter-spacing: .02em; }
+[data-ui].ticket .t-no { font-size: 13px; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+[data-ui].ticket .t-kind { font-weight: 800; font-stretch: 62%; text-transform: uppercase; font-size: 15px; letter-spacing: .06em; padding: 12px 18px 0; }
+[data-ui].ticket .t-title { font-weight: 700; font-stretch: 80%; font-size: 26px; line-height: 1.02; padding: 6px 18px 10px; text-wrap: balance; }
+[data-ui].ticket dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; padding: 10px 18px; border-top: 1.5px dashed #9bbdbd; margin: 0 0 0; }
+[data-ui].ticket dt { font-size: 12px; font-weight: 600; padding-top: 2px; }
+[data-ui].ticket dd { font-size: 14px; overflow-wrap: anywhere; }
+[data-ui].ticket .t-id { font-size: 13px; font-weight: 500; letter-spacing: .01em; }
+[data-ui].ticket .t-fine { display: flex; justify-content: space-between; align-items: end; gap: 12px; margin: 4px 18px 0; padding: 12px 0 0; border-top: 2px solid var(--t-ink); }
+[data-ui].ticket .t-fine b { font-weight: 800; font-stretch: 62%; font-size: 46px; line-height: .9; font-variant-numeric: tabular-nums; }
+[data-ui].ticket .t-fine small { font-size: 13px; display: block; text-align: right; }
+[data-ui].ticket .t-do { margin: 12px 18px 0; font-size: 14px; }
+[data-ui].ticket .t-do b { font-weight: 700; }
+[data-ui].ticket .t-stamp { position: absolute; right: 14px; top: 64px; border: 3px double var(--t-ink); color: var(--t-ink); font-weight: 800; font-stretch: 62%; text-transform: uppercase; font-size: 18px; letter-spacing: .08em; padding: 2px 8px; transform: rotate(-8deg); }
+[data-ui].ticket .t-meter { display: inline-flex; gap: 2px; vertical-align: -1px; margin-right: 6px; }
+[data-ui].ticket .t-meter i { width: 6px; height: 11px; background: #cfe0df; }
+[data-ui].ticket .t-meter[data-l="1"] i:nth-child(-n+1), [data-ui].ticket .t-meter[data-l="2"] i:nth-child(-n+2), [data-ui].ticket .t-meter[data-l="3"] i { background: var(--t-ink); }
 
-  /* findings */
-  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-  .chip { font: inherit; font-size: .78rem; border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 4px 11px; cursor: pointer; color: var(--text); }
-  .chip[aria-pressed="true"] { background: var(--text); color: #fff; border-color: var(--text); }
-  .chip .n { color: var(--faint); margin-left: 4px; }
-  .chip[aria-pressed="true"] .n { color: #BDB8B0; }
-  .table-scroll { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: .86rem; min-width: 760px; }
-  th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 500; padding: 12px 14px; border-bottom: 1px solid var(--border); background: #FBFAF8; }
-  td { padding: 13px 14px; border-bottom: 1px solid #F0EDE8; vertical-align: top; }
-  tr:last-child td { border-bottom: 0; }
-  td.rank { color: var(--faint); font-variant-numeric: tabular-nums; width: 36px; }
-  td .title { font-weight: 600; }
-  td .rid { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .76rem; background: #F3F1ED; padding: 1px 5px; border-radius: 4px; word-break: break-all; }
-  td .rname { color: var(--muted); font-size: .8rem; }
-  td .detail { color: var(--muted); font-size: .8rem; margin-top: 3px; }
-  td.saving { text-align: right; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  th.right { text-align: right; }
-  .est { display: block; font-weight: 400; font-size: .7rem; color: var(--amber); }
-  .pill { display: inline-block; font-size: .74rem; padding: 1px 9px; border-radius: 999px; font-weight: 500; }
-  .pill.low { background: var(--green-bg); color: var(--green); }
-  .pill.medium { background: var(--amber-bg); color: var(--amber); }
-  .pill.high { background: var(--red-bg); color: var(--red); }
-  td.action { max-width: 260px; }
-  td.region { white-space: nowrap; }
-  @media (max-width: 640px) {
-    table { min-width: 0; }
-    thead { display: none; }
-    tbody tr { display: flex; flex-wrap: wrap; align-items: center; padding: 12px 4px; border-bottom: 1px solid #F0EDE8; }
-    tbody td { border: 0; padding: 3px 10px; }
-    td.rank { display: none; }
-    td.finding { flex: 1 1 calc(100% - 120px); min-width: 0; order: 1; }
-    td.saving { flex: 0 0 110px; align-self: flex-start; order: 2; }
-    td.region { order: 3; color: var(--muted); font-size: .8rem; }
-    td.effort { order: 4; } td.risk { order: 5; }
-    td.effort::before { content: 'Effort '; color: var(--muted); font-size: .78rem; }
-    td.risk::before { content: 'Risk '; color: var(--muted); font-size: .78rem; }
-    td.action { order: 6; flex: 1 1 100%; max-width: none; font-size: .84rem; }
-    td.action::before { content: 'Action: '; color: var(--muted); }
-  }
+/* section frame */
+.sec { padding: var(--gap) var(--m); }
+.sec h2 { font-size: var(--step-head); }
+.lead { font-size: var(--step-lead); line-height: 1.3; max-width: 32ch; margin-top: 18px; }
 
-  /* how it works */
-  .how { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-  @media (max-width: 860px) { .how { grid-template-columns: 1fr; } }
-  .how .panel p { color: var(--muted); font-size: .86rem; }
-  footer { margin: 40px 0 32px; color: var(--muted); font-size: .8rem; display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between; }
-  footer a { color: inherit; }
+/* showcase: teal field, a row of tickets, the centred one lit */
+.showcase { background: var(--field-1); color: var(--field-1-ink); padding: clamp(80px, 9vw, 130px) 0 clamp(90px, 10vw, 140px); }
+.showcase-head { padding: 0 var(--m); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 24ch); gap: 24px 48px; align-items: end; }
+.showcase-head h2 { font-size: var(--step-head); }
+.showcase-head p { font-size: var(--step-body); }
+.row-wrap { position: relative; margin-top: 56px; }
+.row { display: flex; gap: 5vw; overflow-x: auto; scroll-snap-type: x mandatory; padding: 12px calc(50vw - 230px) 24px; scrollbar-width: none; cursor: grab; }
+.row::-webkit-scrollbar { display: none; }
+.row:active { cursor: grabbing; }
+.row .slot { flex: 0 0 460px; scroll-snap-align: center; transition: transform 420ms var(--ease-out); transform: scale(.9) rotate(var(--tilt, 0deg)); }
+.row .slot.is-lit { transform: scale(1) rotate(0deg); }
+.row .slot:not(.is-lit) [data-ui].ticket { background: #d9e7e6; }
+.now { padding: 0 var(--m); margin-top: 28px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px 32px; align-items: start; }
+.now h3 { font-size: var(--step-lead); font-weight: 500; line-height: 1.2; }
+.now p { max-width: 52ch; margin-top: 6px; }
+.now .pager { display: flex; gap: 8px; }
+.pager button { width: 56px; height: 56px; border: 0; background: var(--field-1-ink); color: var(--ink); cursor: pointer; display: grid; place-items: center; transition: transform var(--t-press) var(--ease-out), background-color var(--t-hover) ease; }
+.pager button:active { transform: scale(.94); }
+@media (hover: hover) and (pointer: fine) { .pager button:hover { background: var(--field-1-soft); } }
+.sample-note { padding: 0 var(--m); margin-top: 22px; font-size: var(--step-small); color: var(--field-1-soft); }
+@media (max-width: 760px) {
+  .showcase-head { grid-template-columns: 1fr; }
+  .row { gap: 4vw; padding: 12px 7vw 20px; }
+  .row .slot { flex-basis: 86vw; }
+  .now { grid-template-columns: 1fr; }
+}
 
-  @media print {
-    .topbar, .chips, .how-section, footer .no-print { display: none !important; }
-    body { background: #fff; }
-    .card { box-shadow: none; }
-    table { min-width: 0; }
-    tr { page-break-inside: avoid; }
-  }
+/* stats: the total and its receipt */
+.stats { background: var(--surface); display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; }
+.stats-left { grid-column: 1 / 8; display: flex; flex-direction: column; gap: clamp(48px, 7vw, 112px); }
+.stats-left h2 { font-size: clamp(2.5rem, 1.6rem + 2.4vw, 3.5rem); }
+.stats-left .note { max-width: 40ch; margin-top: 16px; }
+.total b { display: block; font-weight: 800; font-stretch: 62%; font-size: clamp(7rem, 15vw, 17rem); line-height: .8; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.total span { display: block; margin-top: 18px; font-size: 1.0625rem; max-width: 44ch; }
+.slip-wrap { grid-column: 8 / 13; align-self: start; }
+[data-ui].slip { background: var(--bg); color: var(--ink); padding: 26px 24px 46px; font-size: 15.5px; clip-path: polygon(0 0, 100% 0, 100% calc(100% - 12px), 95% 100%, 90% calc(100% - 12px), 85% 100%, 80% calc(100% - 12px), 75% 100%, 70% calc(100% - 12px), 65% 100%, 60% calc(100% - 12px), 55% 100%, 50% calc(100% - 12px), 45% 100%, 40% calc(100% - 12px), 35% 100%, 30% calc(100% - 12px), 25% 100%, 20% calc(100% - 12px), 15% 100%, 10% calc(100% - 12px), 5% 100%, 0 calc(100% - 12px)); }
+[data-ui].slip .s-head { font-weight: 800; font-stretch: 62%; text-transform: uppercase; font-size: 26px; line-height: 1; }
+[data-ui].slip .s-sub { font-size: 13.5px; margin: 6px 0 16px; }
+[data-ui].slip .s-group { font-weight: 700; font-size: 13.5px; margin: 14px 0 4px; }
+[data-ui].slip label { display: grid; grid-template-columns: 22px minmax(0, max-content) minmax(16px, 1fr) auto; align-items: end; gap: 8px; padding: 6px 0; cursor: pointer; }
+[data-ui].slip input { width: 17px; height: 17px; accent-color: var(--ink); align-self: start; margin-top: 2px; cursor: pointer; }
+[data-ui].slip .s-n { font-weight: 700; white-space: nowrap; }
+[data-ui].slip .s-dots { margin-bottom: 5px; border-bottom: 2.5px dotted currentColor; opacity: .45; }
+[data-ui].slip .s-val { font-variant-numeric: tabular-nums; text-align: right; }
+[data-ui].slip label:has(input:not(:checked)) .s-name, [data-ui].slip label:has(input:not(:checked)) .s-val { text-decoration: line-through; color: #5f8f95; }
+[data-ui].slip .s-total { display: flex; justify-content: space-between; background: var(--ink); color: var(--bg); padding: 10px 12px; margin: 16px -12px 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+@media (max-width: 860px) {
+  .stats { display: block; }
+  .stats-left { gap: 40px; }
+  .total b { font-size: 34vw; }
+  .slip-wrap { margin-top: 48px; }
+}
+
+/* spending: one item per poster line */
+.list { padding: 96px var(--m); }
+.list h2 { font-size: clamp(2.5rem, 1.6rem + 2.4vw, 3.5rem); max-width: 18ch; }
+.list .note { margin-top: 14px; max-width: 52ch; }
+.list ol { list-style: none; margin-top: 64px; }
+.list li { display: flex; justify-content: space-between; align-items: baseline; gap: 24px; transition: color var(--t-hover) ease; }
+.list li .big { font-size: var(--list-size, clamp(4rem, 10vw, 9.4rem)); line-height: .92; white-space: nowrap; }
+.list li .fact { font-size: var(--step-lead); font-weight: 600; font-stretch: 100%; text-transform: none; line-height: 1.2; font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+.list li .fact small { display: block; font-size: var(--step-small); font-weight: 400; }
+@media (hover: hover) and (pointer: fine) { .list li:hover { color: var(--muted); } }
+@media (max-width: 760px) {
+  .list li { align-items: flex-start; gap: 12px; padding: 0 0 22px; }
+  .list li .big { font-size: 15vw; white-space: normal; min-width: 0; }
+  .list li .fact { font-size: 17px; padding-top: 6px; }
+}
+
+/* how it works: many into one */
+.how { background: var(--surface); }
+.how-head { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; }
+.how-head > div { grid-column: 1 / 6; }
+.how h2 { font-size: clamp(2.25rem, 4vw, 3.75rem); }
+.how-head p { margin-top: 16px; max-width: 44ch; font-size: 1.0625rem; }
+.diagram { margin-top: 56px; }
+.diagram svg { width: 100%; height: auto; }
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 28px; }
+.steps h3 { font-size: 1.25rem; font-weight: 700; }
+.steps p { margin-top: 6px; max-width: 34ch; }
+@media (max-width: 760px) {
+  .how-head > div { grid-column: 1 / -1; }
+  .diagram { margin: 40px calc(var(--m) * -1) 0; }
+  .steps { grid-template-columns: 1fr; gap: 28px; }
+}
+
+/* cta: the whole band is the action */
+.cta { display: flex; flex-direction: column; justify-content: space-between; gap: clamp(64px, 10vw, 160px); position: relative; background: var(--accent); color: var(--accent-ink); padding: 28px var(--m) 20px; text-decoration: none; cursor: pointer; overflow: clip; transition: background-color 260ms ease, color 260ms ease; }
+.cta .what { font-size: var(--step-lead); max-width: 30ch; line-height: 1.3; padding-right: 64px; }
+.cta .arrow { position: absolute; right: var(--m); top: 28px; width: 48px; height: 48px; transition: transform 360ms var(--ease-out); }
+.cta .word { display: block; font-size: clamp(9rem, 40vw, 44rem); line-height: .74; margin-left: -.03em; }
+@media (hover: hover) and (pointer: fine) { .cta:hover { background: var(--accent-strong); } .cta:hover .arrow { transform: translate(6px, -6px); } }
+.cta:focus-visible { background: var(--accent-strong); outline-offset: -6px; }
+.cta:active .word { transform: scale(.99); transform-origin: 0 100%; }
+@media (max-width: 760px) { .cta .arrow { width: 32px; height: 32px; } .cta .what { padding-right: 44px; } .cta .word { font-size: 44vw; } }
+
+/* footer: the contact is the headline */
+.foot { background: var(--surface); color: var(--ink); min-height: 72svh; padding: 40px var(--m) 28px; display: flex; flex-direction: column; justify-content: space-between; gap: 64px; }
+.foot-top { display: flex; justify-content: space-between; gap: 24px; align-items: start; font-size: 15px; }
+.foot-top ul { list-style: none; display: grid; gap: 4px; max-width: 46ch; }
+.foot-top .wm { font-weight: 800; font-stretch: 62%; text-transform: uppercase; font-size: 1.5rem; }
+.foot .contact { display: block; font-size: clamp(4rem, 12.5vw, 13rem); text-decoration: none; }
+.foot .contact span { display: block; }
+.foot-meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 14px; margin-top: 28px; }
+.foot-meta > :nth-child(2) { text-align: center; } .foot-meta > :nth-child(3) { text-align: right; }
+@media (max-width: 760px) { .foot-top { flex-direction: column; } .foot .contact { font-size: 15vw; } .foot-meta { grid-template-columns: 1fr; font-size: 13px; } .foot-meta > * { text-align: left !important; } }
+
+/* states */
+.loaded-note { font-size: var(--step-small); }
+.error-note { background: var(--accent-ink); color: #8c2f1e; padding: 12px var(--m); font-weight: 500; }
+.error-note[hidden] { display: none; }
+
+/* motion */
+@media (prefers-reduced-motion: no-preference) {
+  .js [data-reveal] { opacity: 0; transform: translateY(24px); transition: opacity 700ms var(--ease-out), transform 800ms var(--ease-out); transition-delay: calc(var(--i, 0) * 80ms); }
+  .js [data-reveal].is-in { opacity: 1; transform: none; }
+  .js .hero h1 span { opacity: 0; transform: translateY(40px); animation: rise 900ms var(--ease-out) forwards; }
+  .js .hero h1 span:nth-child(2) { animation-delay: 90ms; }
+  .js .hero-band > * { opacity: 0; animation: fade 700ms var(--ease-out) 350ms forwards; }
+  .js .shutter { clip-path: inset(0 0 100% 0); transition: clip-path 1100ms var(--ease-in-out) 200ms; }
+  .js .shutter > * { transform: scale(1.12); transition: transform 1500ms var(--ease-out) 200ms; transform-origin: 50% 0; }
+  .js .shutter.is-in { clip-path: inset(0 0 -40px 0); }
+  .js .shutter.is-in > * { transform: none; }
+  .hero-ticket .sway { animation: sway 7s ease-in-out 1.6s infinite alternate; transform-origin: 50% 0; }
+  .js .list li { opacity: 0; transform: translateX(-32px); transition: opacity 700ms var(--ease-out), transform 800ms var(--ease-out), color var(--t-hover) ease; transition-delay: calc(var(--i, 0) * 90ms); }
+  .js .list ol.is-in li { opacity: 1; transform: none; }
+  .js .diagram rect { transition: transform 900ms var(--ease-out), opacity 600ms ease; transition-delay: calc(var(--d, 0) * 5ms); }
+  .js .diagram:not(.is-in) rect { opacity: 0; transform: translateX(-30px); }
+  .total b { transition: color var(--t-hover) ease; }
+}
+@keyframes rise { to { opacity: 1; transform: none; } }
+@keyframes fade { to { opacity: 1; } }
+@keyframes sway { from { transform: rotate(-1.2deg); } to { transform: rotate(1.4deg); } }
+@media print { .nav, .cta, .pager, .row-wrap, .foot .contact { display: none !important; } .hero { min-height: auto; } }
 </style>
 </head>
 <body>
 
-<div class="topbar">
-  <div class="wrap">
-    <div class="brand">
-      <div class="mark" aria-hidden="true">
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1.5 14 5v6l-6 3.5L2 11V5l6-3.5Z" stroke="#fff" stroke-width="1.5"/><circle cx="8" cy="8" r="2" fill="#fff"/></svg>
+<header class="nav">
+  <a class="wordmark" href="#top" aria-label="CostPatrol, back to the top">CostPatrol</a>
+  <nav aria-label="Main">
+    <ul>
+      <li class="hide-sm"><a class="link" href="#tickets">Tickets</a></li>
+      <li class="hide-sm"><a class="link" href="#savings">Savings</a></li>
+      <li class="hide-sm"><a class="link" href="#spending">Spending</a></li>
+      <li class="hide-sm"><a class="link" href="#how">How it works</a></li>
+      <li><label class="open" for="fileInput" tabindex="0" role="button">Open a report</label></li>
+    </ul>
+  </nav>
+  <input type="file" id="fileInput" accept=".json,application/json" class="vh" tabindex="-1">
+</header>
+
+<main id="top">
+  <section class="hero" aria-labelledby="heroTitle">
+    <div class="hero-field">
+      <h1 class="shout" id="heroTitle"><span>Left</span> <span>running</span></h1>
+      <div class="hero-ticket" aria-hidden="true">
+        <div class="shutter" id="heroShutter"><div class="sway" id="heroTicket"></div></div>
       </div>
-      <b>Cost Optimizer</b><span>Read-only AWS cost review</span>
     </div>
-    <div class="actions">
-      <button class="btn print" type="button" id="printBtn">Save as PDF</button>
-      <button class="btn" type="button" id="sampleBtn" hidden>Show sample</button>
-      <label class="btn primary" for="fileInput" tabindex="0" id="openLabel">Open report file</label>
-      <input type="file" id="fileInput" accept=".json,application/json" hidden>
+    <div class="hero-band">
+      <p><strong>CostPatrol</strong> checks your AWS account every Monday and writes a ticket for everything you pay for but don't use.</p>
+      <a class="button" href="#tickets">See this week's tickets
+        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M9 2v13M3 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2"/></svg></a>
+    </div>
+  </section>
+
+  <p class="error-note" id="errorNote" role="alert" hidden></p>
+
+  <section class="showcase" id="tickets" aria-labelledby="ticketsTitle">
+    <div class="showcase-head">
+      <h2 class="shout" id="ticketsTitle" data-reveal>This week's tickets</h2>
+      <p id="ticketsLead" data-reveal style="--i:1"></p>
+    </div>
+    <div class="row-wrap" data-reveal style="--i:2">
+      <div class="row" id="row" tabindex="0" aria-label="Tickets, scroll sideways"></div>
+    </div>
+    <div class="now" aria-live="polite">
+      <div><h3 id="nowTitle"></h3><p id="nowText"></p></div>
+      <div class="pager">
+        <button type="button" id="prevBtn" aria-label="Previous ticket"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M14 4 7 11l7 7" fill="none" stroke="currentColor" stroke-width="2.4"/></svg></button>
+        <button type="button" id="nextBtn" aria-label="Next ticket"><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="m8 4 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.4"/></svg></button>
+      </div>
+    </div>
+    <p class="sample-note" id="sourceNote"></p>
+  </section>
+
+  <section class="sec stats" id="savings" aria-labelledby="savingsTitle">
+    <div class="stats-left">
+      <div>
+        <h2 class="shout" id="savingsTitle" data-reveal>What fixing them saves</h2>
+        <p class="note" data-reveal style="--i:1">Untick anything you want to keep. The total is what you'd stop paying each month.</p>
+      </div>
+      <div class="total" data-reveal style="--i:2">
+        <b class="num" id="total">$0</b>
+        <span id="totalCaption"></span>
+      </div>
+    </div>
+    <div class="slip-wrap" data-reveal style="--i:3">
+      <form class="slip" data-ui id="slip" aria-label="Savings receipt"></form>
+    </div>
+  </section>
+
+  <section class="list" id="spending" aria-labelledby="spendTitle">
+    <h2 class="shout" id="spendTitle" data-reveal></h2>
+    <p class="note" id="spendNote" data-reveal style="--i:1"></p>
+    <ol id="spendList" class="shout"></ol>
+  </section>
+
+  <section class="sec how" id="how" aria-labelledby="howTitle">
+    <div class="how-head">
+      <div>
+        <h2 class="shout" id="howTitle" data-reveal>How the patrol works</h2>
+        <p data-reveal style="--i:1">It looks, it writes it down, it tells you. It never switches anything off on its own: every fix stays your decision.</p>
+      </div>
+    </div>
+    <div class="how-body">
+      <div class="diagram" id="diagram" aria-hidden="true"></div>
+      <div class="steps">
+        <div data-reveal><h3>Walk</h3><p>Every Monday at 08:00 UTC it checks every region of your account, with read-only access.</p></div>
+        <div data-reveal style="--i:1"><h3>Write</h3><p>Each thing you pay for but don't use gets a ticket with its monthly cost, in plain words.</p></div>
+        <div data-reveal style="--i:2"><h3>Tell</h3><p>You get the tickets by email, biggest first, with what to do about each one.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <label class="cta" for="fileInput" tabindex="0" role="button" aria-label="Open your own report file">
+    <span class="what">Got a report from your own CostPatrol? Open it here to see your tickets. It stays on your computer and is never uploaded.</span>
+    <svg class="arrow" viewBox="0 0 48 48" aria-hidden="true"><path d="M12 36 36 12M16 12h20v20" fill="none" stroke="currentColor" stroke-width="3.5"/></svg>
+    <span class="word shout" aria-hidden="true">Open</span>
+  </label>
+</main>
+
+<footer class="foot">
+  <div class="foot-top">
+    <ul>
+      <li class="wm">CostPatrol</li>
+      <li>Open source. Terraform, AWS Lambda, Cost Explorer, S3 and CloudFront.</li>
+      <li>Read-only: it can look at your account, never change it.</li>
+    </ul>
+    <a class="link" href="#top">Back to the top</a>
+  </div>
+  <div>
+    <a class="contact shout" href="https://www.upwork.com/freelancers/~01567b2e456eb712e3"><span>Get a cost</span><span>review</span></a>
+    <div class="foot-meta">
+      <a class="link" href="https://github.com/cyberN3m3/AWS-Cost-Optimization-Dashboard">Source on GitHub</a>
+      <span>Built by Anyasi Chineme</span>
+      <span>Lagos, 2026</span>
     </div>
   </div>
-</div>
+</footer>
 
-<main class="wrap">
-  <header class="hero">
-    <h1>Weekly <em>cost</em> report</h1>
-    <div class="meta" id="meta"></div>
-    <div class="banner sample" id="banner" role="status"></div>
-  </header>
-
-  <div class="kpis" id="kpis"></div>
-
-  <section id="spendSection">
-    <h2>Where the money goes</h2>
-    <p class="lead" id="spendLead"></p>
-    <div class="spend-grid">
-      <div class="card panel"><h3 id="topTitle">Top services</h3><div id="topServices"></div></div>
-      <div class="card panel"><h3>What went up</h3><div id="risers"></div></div>
-    </div>
-  </section>
-
-  <section>
-    <h2>Savings, biggest first</h2>
-    <p class="lead">Each item shows the monthly saving, how much work the fix is (effort) and how likely it is to affect something still in use (risk). Nothing here is changed automatically.</p>
-    <div id="planCallout"></div>
-    <div class="chips" id="chips" role="group" aria-label="Filter findings"></div>
-    <div class="card table-scroll">
-      <table>
-        <thead><tr><th>#</th><th>Finding</th><th>Region</th><th class="right">Saving / month</th><th>Effort</th><th>Risk</th><th>Recommended action</th></tr></thead>
-        <tbody id="rows"></tbody>
-      </table>
-    </div>
-  </section>
-
-  <section class="how-section">
-    <h2>How it works</h2>
-    <p class="lead">A scheduled Lambda function scans every enabled region, reads the bill from Cost Explorer, and writes this report to a private S3 bucket.</p>
-    <div class="how">
-      <div class="card panel"><h3>Read-only</h3><p>The scanner only has Describe, List and Get permissions. It cannot stop, delete or change anything.</p></div>
-      <div class="card panel"><h3>No public API</h3><p>Scans run weekly or with <code>aws lambda invoke</code>. This page never talks to AWS: it shows sample data or a report file you open, and the file stays in your browser.</p></div>
-      <div class="card panel"><h3>Priced for real</h3><p>EC2 prices come from the AWS Price List API and spend comes from Cost Explorer. Other prices use published us-east-1 rates and are marked "estimate".</p></div>
-    </div>
-  </section>
-
-  <footer>
-    <span>Cost Optimizer v3 &middot; Terraform, Lambda (Python), Cost Explorer, S3, SNS, CloudFront</span>
-    <a class="no-print" href="https://github.com/cyberN3m3/AWS-Cost-Optimization-Dashboard">Source on GitHub</a>
-  </footer>
-</main>
+<noscript><p style="padding:20px">CostPatrol needs JavaScript to show the tickets.</p></noscript>
 
 <script>
 'use strict';
-const SAMPLE = {"version": "3.0", "sample": true, "scanned_at": "2026-10-26 08:00 UTC", "account_id": "", "regions_scanned": ["eu-west-2", "us-east-1"], "totals": {"findings": 11, "monthly_saving": 332.52, "yearly_saving": 3990.24, "savings_plan_monthly": 96.3}, "spend": {"last_month": "September 2026", "month_before": "August 2026", "total_last_month": 1846.2, "total_month_before": 1512.4, "change": 333.8, "change_pct": 22.1, "top_services": [{"service": "Amazon Elastic Compute Cloud - Compute", "cost": 812.3, "share_pct": 44.0}, {"service": "Amazon Relational Database Service", "cost": 402.1, "share_pct": 21.8}, {"service": "EC2 - Other", "cost": 236.4, "share_pct": 12.8}, {"service": "Amazon Simple Storage Service", "cost": 118.2, "share_pct": 6.4}, {"service": "AmazonCloudWatch", "cost": 96.7, "share_pct": 5.2}], "biggest_risers": [{"service": "Amazon Elastic Compute Cloud - Compute", "increase": 210.5, "from": 601.8, "to": 812.3}, {"service": "EC2 - Other", "increase": 71.2, "from": 165.2, "to": 236.4}, {"service": "AmazonCloudWatch", "increase": 38.9, "from": 57.8, "to": 96.7}], "forecast_this_month": 1902.4}, "savings_plan": {"hourly_commitment": 0.42, "monthly_saving": 96.3, "saving_pct": 21.0}, "by_check": {"idle_ec2": {"label": "Idle EC2 instances", "count": 2, "monthly_saving": 200.89}, "unattached_ebs": {"label": "Unattached EBS volumes", "count": 1, "monthly_saving": 40.0}, "idle_nat": {"label": "Idle NAT gateways", "count": 1, "monthly_saving": 32.85}, "gp2_to_gp3": {"label": "gp2 volumes to move to gp3", "count": 1, "monthly_saving": 20.0}, "idle_load_balancer": {"label": "Idle load balancers", "count": 1, "monthly_saving": 16.43}, "old_snapshot": {"label": "Old EBS snapshots", "count": 1, "monthly_saving": 12.5}, "unattached_eip": {"label": "Unattached Elastic IPs", "count": 2, "monthly_saving": 7.3}, "log_retention": {"label": "Log groups with no retention", "count": 1, "monthly_saving": 2.55}, "s3_no_lifecycle": {"label": "S3 buckets with no lifecycle rules", "count": 1, "monthly_saving": 0.0}}, "findings": [{"check": "idle_ec2", "title": "Idle EC2 instance", "resource_id": "i-0a1b2c3d4e5f60718", "resource_name": "staging-api", "region": "us-east-1", "monthly_cost": 140.16, "monthly_saving": 140.16, "saving_is_estimate": false, "effort": "Low", "risk": "Medium", "action": "Stop the instance, or terminate it after taking an AMI backup", "detail": "m5.xlarge, average CPU 0.62% over 7 days"}, {"check": "idle_ec2", "title": "Idle EC2 instance", "resource_id": "i-07c9e1f2a3b4c5d6e", "resource_name": "reporting-worker", "region": "us-east-1", "monthly_cost": 121.47, "monthly_saving": 60.73, "saving_is_estimate": false, "effort": "Medium", "risk": "Medium", "action": "Downsize to t3.large", "detail": "t3.xlarge, average CPU 3.10% over 7 days"}, {"check": "unattached_ebs", "title": "Unattached EBS volume", "resource_id": "vol-0f3e2d1c0b9a87654", "resource_name": "old-db-data", "region": "us-east-1", "monthly_cost": 40.0, "monthly_saving": 40.0, "saving_is_estimate": true, "effort": "Low", "risk": "Low", "action": "Take a snapshot, then delete the volume", "detail": "500 GB gp3, created 2025-11-03"}, {"check": "idle_nat", "title": "Idle NAT gateway", "resource_id": "nat-0d4c3b2a1908f7e6d", "resource_name": "", "region": "eu-west-2", "monthly_cost": 32.85, "monthly_saving": 32.85, "saving_is_estimate": true, "effort": "Medium", "risk": "Medium", "action": "Check the route tables that use it, then delete it (or replace it with VPC endpoints)", "detail": "Sent 18,204 bytes in 7 days, in vpc-0a12b34c56d78e90f"}, {"check": "gp2_to_gp3", "title": "gp2 volume that can move to gp3", "resource_id": "vol-0a9b8c7d6e5f4a3b2", "resource_name": "prod-db-volume", "region": "us-east-1", "monthly_cost": 100.0, "monthly_saving": 20.0, "saving_is_estimate": true, "effort": "Low", "risk": "Low", "action": "Change the volume type to gp3 (no downtime, about 20% cheaper)", "detail": "1000 GB gp2, state in-use"}, {"check": "idle_load_balancer", "title": "Idle application load balancer", "resource_id": "old-marketing-alb", "resource_name": "", "region": "us-east-1", "monthly_cost": 16.43, "monthly_saving": 16.43, "saving_is_estimate": true, "effort": "Low", "risk": "Medium", "action": "Confirm nothing points at it (DNS, other services), then delete it", "detail": "no healthy targets; cost shown is the hourly charge only"}, {"check": "old_snapshot", "title": "Old EBS snapshot", "resource_id": "snap-0c1d2e3f4a5b6c7d8", "resource_name": "pre-migration-backup", "region": "us-east-1", "monthly_cost": 12.5, "monthly_saving": 12.5, "saving_is_estimate": true, "effort": "Low", "risk": "Medium", "action": "Confirm it is not needed for recovery, then delete it or move it to the archive tier", "detail": "250 GB, 412 days old (cost shown is the most it can be)"}, {"check": "unattached_eip", "title": "Unattached Elastic IP", "resource_id": "eipalloc-0b1c2d3e4f5a6b7c8", "resource_name": "", "region": "us-east-1", "monthly_cost": 3.65, "monthly_saving": 3.65, "saving_is_estimate": false, "effort": "Low", "risk": "Low", "action": "Release the address if nothing needs this exact IP", "detail": "54.210.17.88 is not attached; AWS charges for every public IPv4 address"}, {"check": "unattached_eip", "title": "Unattached Elastic IP", "resource_id": "eipalloc-0e9d8c7b6a5f4e3d2", "resource_name": "", "region": "eu-west-2", "monthly_cost": 3.65, "monthly_saving": 3.65, "saving_is_estimate": false, "effort": "Low", "risk": "Low", "action": "Release the address if nothing needs this exact IP", "detail": "18.133.40.12 is not attached; AWS charges for every public IPv4 address"}, {"check": "log_retention", "title": "Log group that keeps data forever", "resource_id": "/aws/lambda/image-resizer", "resource_name": "", "region": "us-east-1", "monthly_cost": 2.55, "monthly_saving": 2.55, "saving_is_estimate": true, "effort": "Low", "risk": "Low", "action": "Set a retention period (for example 30 or 90 days)", "detail": "85.00 GB stored with no expiry; saving shown is the most it can be"}, {"check": "s3_no_lifecycle", "title": "S3 bucket with no lifecycle rules", "resource_id": "acme-app-uploads", "resource_name": "", "region": "global", "monthly_cost": 0, "monthly_saving": 0, "saving_is_estimate": true, "effort": "Low", "risk": "Low", "action": "Add lifecycle rules: move old objects to cheaper storage and expire what is not needed", "detail": "Storage grows with no limit; the saving depends on how much data is old"}]};
+const SAMPLE = {"version":"3.0","sample":true,"scanned_at":"2026-10-26 08:00 UTC","account_id":"","regions_scanned":["eu-west-2","us-east-1"],"totals":{"findings":11,"monthly_saving":332.52,"yearly_saving":3990.24,"savings_plan_monthly":96.3},"spend":{"last_month":"September 2026","month_before":"August 2026","total_last_month":1846.2,"total_month_before":1512.4,"change":333.8,"change_pct":22.1,"top_services":[{"service":"Amazon Elastic Compute Cloud - Compute","cost":812.3,"share_pct":44.0},{"service":"Amazon Relational Database Service","cost":402.1,"share_pct":21.8},{"service":"EC2 - Other","cost":236.4,"share_pct":12.8},{"service":"Amazon Simple Storage Service","cost":118.2,"share_pct":6.4},{"service":"AmazonCloudWatch","cost":96.7,"share_pct":5.2}],"biggest_risers":[{"service":"Amazon Elastic Compute Cloud - Compute","increase":210.5,"from":601.8,"to":812.3},{"service":"EC2 - Other","increase":71.2,"from":165.2,"to":236.4},{"service":"AmazonCloudWatch","increase":38.9,"from":57.8,"to":96.7}],"forecast_this_month":1902.4},"savings_plan":{"hourly_commitment":0.42,"monthly_saving":96.3,"saving_pct":21.0},"by_check":{"idle_ec2":{"label":"Idle EC2 instances","count":2,"monthly_saving":200.89},"unattached_ebs":{"label":"Unattached EBS volumes","count":1,"monthly_saving":40.0},"idle_nat":{"label":"Idle NAT gateways","count":1,"monthly_saving":32.85},"gp2_to_gp3":{"label":"gp2 volumes to move to gp3","count":1,"monthly_saving":20.0},"idle_load_balancer":{"label":"Idle load balancers","count":1,"monthly_saving":16.43},"old_snapshot":{"label":"Old EBS snapshots","count":1,"monthly_saving":12.5},"unattached_eip":{"label":"Unattached Elastic IPs","count":2,"monthly_saving":7.3},"log_retention":{"label":"Log groups with no retention","count":1,"monthly_saving":2.55},"s3_no_lifecycle":{"label":"S3 buckets with no lifecycle rules","count":1,"monthly_saving":0.0}},"findings":[{"check":"idle_ec2","title":"Idle EC2 instance","resource_id":"i-0a1b2c3d4e5f60718","resource_name":"staging-api","region":"us-east-1","monthly_cost":140.16,"monthly_saving":140.16,"saving_is_estimate":false,"effort":"Low","risk":"Medium","action":"Stop the instance, or terminate it after taking an AMI backup","detail":"m5.xlarge, average CPU 0.62% over 7 days"},{"check":"idle_ec2","title":"Idle EC2 instance","resource_id":"i-07c9e1f2a3b4c5d6e","resource_name":"reporting-worker","region":"us-east-1","monthly_cost":121.47,"monthly_saving":60.73,"saving_is_estimate":false,"effort":"Medium","risk":"Medium","action":"Downsize to t3.large","detail":"t3.xlarge, average CPU 3.10% over 7 days"},{"check":"unattached_ebs","title":"Unattached EBS volume","resource_id":"vol-0f3e2d1c0b9a87654","resource_name":"old-db-data","region":"us-east-1","monthly_cost":40.0,"monthly_saving":40.0,"saving_is_estimate":true,"effort":"Low","risk":"Low","action":"Take a snapshot, then delete the volume","detail":"500 GB gp3, created 2025-11-03"},{"check":"idle_nat","title":"Idle NAT gateway","resource_id":"nat-0d4c3b2a1908f7e6d","resource_name":"","region":"eu-west-2","monthly_cost":32.85,"monthly_saving":32.85,"saving_is_estimate":true,"effort":"Medium","risk":"Medium","action":"Check the route tables that use it, then delete it (or replace it with VPC endpoints)","detail":"Sent 18,204 bytes in 7 days, in vpc-0a12b34c56d78e90f"},{"check":"gp2_to_gp3","title":"gp2 volume that can move to gp3","resource_id":"vol-0a9b8c7d6e5f4a3b2","resource_name":"prod-db-volume","region":"us-east-1","monthly_cost":100.0,"monthly_saving":20.0,"saving_is_estimate":true,"effort":"Low","risk":"Low","action":"Change the volume type to gp3 (no downtime, about 20% cheaper)","detail":"1000 GB gp2, state in-use"},{"check":"idle_load_balancer","title":"Idle application load balancer","resource_id":"old-marketing-alb","resource_name":"","region":"us-east-1","monthly_cost":16.43,"monthly_saving":16.43,"saving_is_estimate":true,"effort":"Low","risk":"Medium","action":"Confirm nothing points at it (DNS, other services), then delete it","detail":"no healthy targets; cost shown is the hourly charge only"},{"check":"old_snapshot","title":"Old EBS snapshot","resource_id":"snap-0c1d2e3f4a5b6c7d8","resource_name":"pre-migration-backup","region":"us-east-1","monthly_cost":12.5,"monthly_saving":12.5,"saving_is_estimate":true,"effort":"Low","risk":"Medium","action":"Confirm it is not needed for recovery, then delete it or move it to the archive tier","detail":"250 GB, 412 days old (cost shown is the most it can be)"},{"check":"unattached_eip","title":"Unattached Elastic IP","resource_id":"eipalloc-0b1c2d3e4f5a6b7c8","resource_name":"","region":"us-east-1","monthly_cost":3.65,"monthly_saving":3.65,"saving_is_estimate":false,"effort":"Low","risk":"Low","action":"Release the address if nothing needs this exact IP","detail":"54.210.17.88 is not attached; AWS charges for every public IPv4 address"},{"check":"unattached_eip","title":"Unattached Elastic IP","resource_id":"eipalloc-0e9d8c7b6a5f4e3d2","resource_name":"","region":"eu-west-2","monthly_cost":3.65,"monthly_saving":3.65,"saving_is_estimate":false,"effort":"Low","risk":"Low","action":"Release the address if nothing needs this exact IP","detail":"18.133.40.12 is not attached; AWS charges for every public IPv4 address"},{"check":"log_retention","title":"Log group that keeps data forever","resource_id":"/aws/lambda/image-resizer","resource_name":"","region":"us-east-1","monthly_cost":2.55,"monthly_saving":2.55,"saving_is_estimate":true,"effort":"Low","risk":"Low","action":"Set a retention period (for example 30 or 90 days)","detail":"85.00 GB stored with no expiry; saving shown is the most it can be"},{"check":"s3_no_lifecycle","title":"S3 bucket with no lifecycle rules","resource_id":"tallybook-user-uploads","resource_name":"","region":"global","monthly_cost":0,"monthly_saving":0,"saving_is_estimate":true,"effort":"Low","risk":"Low","action":"Add lifecycle rules: move old objects to cheaper storage and expire what is not needed","detail":"Storage grows with no limit; the saving depends on how much data is old"}]};
 
-const LABELS = {
-  idle_ec2: 'Idle EC2', unattached_ebs: 'Unattached EBS', gp2_to_gp3: 'gp2 to gp3',
-  old_snapshot: 'Old snapshots', unattached_eip: 'Elastic IPs', idle_nat: 'NAT gateways',
-  idle_load_balancer: 'Load balancers', log_retention: 'Log retention', s3_no_lifecycle: 'S3 lifecycle'
+const PLAIN = {
+  idle_ec2: ['A server doing nothing', 'It is switched on and billing you, but it has barely worked all week.', 'Servers'],
+  unattached_ebs: ['A hard drive plugged into nothing', 'Storage that is not connected to any server, still charged every month.', 'Storage'],
+  gp2_to_gp3: ['Storage on the old, pricier plan', 'The same disk on the newer plan costs about 20% less, and switching causes no downtime.', 'Storage'],
+  old_snapshot: ['A backup nobody has needed in months', 'Old backup copies add up. Keep the ones you would really restore.', 'Storage'],
+  unattached_eip: ['An address you rent but never use', 'AWS charges for every public address, even one that is not attached to anything.', 'Network'],
+  idle_nat: ['An internet gateway with no traffic', 'It charges by the hour whether anything passes through it or not.', 'Network'],
+  idle_load_balancer: ['A traffic splitter with nothing behind it', 'It is ready to send visitors to servers, but there are none to send them to.', 'Network'],
+  log_retention: ['Logs kept forever', 'Records nobody reads, stored with no end date.', 'Housekeeping'],
+  s3_no_lifecycle: ['A storage bucket that never clears out', 'Files pile up forever unless old ones are moved or removed.', 'Housekeeping'],
 };
-const money = v => '$' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const moneyShort = v => Number(v || 0) < 100 ? money(v) : '$' + Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+const SERVICES = {
+  'Amazon Elastic Compute Cloud - Compute': 'Servers', 'EC2 - Other': 'Disks & network', 'Amazon Relational Database Service': 'Databases',
+  'Amazon Simple Storage Service': 'File storage', 'AmazonCloudWatch': 'Monitoring', 'AWS Secrets Manager': 'Password vault',
+  'AWS Amplify': 'Web hosting', 'Amazon DynamoDB': 'Quick database', 'AWS Lambda': 'Small functions', 'Amazon Virtual Private Cloud': 'Private network',
+  'Amazon CloudFront': 'Content delivery', 'Amazon Route 53': 'Domain names', 'AWS WAF': 'Web firewall', 'Amazon Elastic Load Balancing': 'Load balancing',
+  'Amazon Elastic Container Service': 'Containers', 'Amazon API Gateway': 'APIs', 'Amazon Simple Notification Service': 'Notifications', 'AWS Key Management Service': 'Encryption keys',
+};
+const LEVEL = { Low: 1, Medium: 2, High: 3 };
+const PLACES = {
+  'us-east-1': 'N. Virginia', 'us-east-2': 'Ohio', 'us-west-1': 'N. California', 'us-west-2': 'Oregon', 'ca-central-1': 'Canada',
+  'sa-east-1': 'São Paulo', 'eu-west-1': 'Ireland', 'eu-west-2': 'London', 'eu-west-3': 'Paris', 'eu-central-1': 'Frankfurt',
+  'eu-north-1': 'Stockholm', 'eu-south-1': 'Milan', 'af-south-1': 'Cape Town', 'me-south-1': 'Bahrain', 'me-central-1': 'UAE',
+  'ap-south-1': 'Mumbai', 'ap-northeast-1': 'Tokyo', 'ap-northeast-2': 'Seoul', 'ap-northeast-3': 'Osaka', 'ap-southeast-1': 'Singapore',
+  'ap-southeast-2': 'Sydney', 'ap-east-1': 'Hong Kong', 'global': 'Everywhere',
+};
+const place = code => PLACES[code] ? PLACES[code] + ' (' + code + ')' : code;
 const $ = id => document.getElementById(id);
+const money = v => '$' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const moneyRound = v => Number(v || 0) < 1000 ? money(v) : '$' + Math.round(v).toLocaleString('en-US');
+function el(tag, attrs, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) { if (k === 'class') n.className = v; else n.setAttribute(k, v); }
+  for (const c of kids) if (c != null && c !== false) n.append(c.nodeType ? c : String(c));
+  return n;
+}
+const plain = f => PLAIN[f.check] || [f.title, f.detail, 'Other'];
+function serviceName(s) {
+  return SERVICES[s] || s.replace(/^Amazon\s*|^AWS\s*/i, '').replace(/^Elastic\s+/i, '').slice(0, 18);
+}
+function scanDay(r) {
+  const d = new Date(String(r.scanned_at || '').replace(' UTC', 'Z').replace(' ', 'T'));
+  return isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
-function el(tag, attrs, ...children) {
-  const node = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs || {})) {
-    if (k === 'class') node.className = v; else if (k === 'style') node.style.cssText = v; else node.setAttribute(k, v);
+function ticket(f, i, r) {
+  const [title] = plain(f);
+  const fine = f.monthly_saving > 0;
+  return el('article', { class: 'ticket', 'data-ui': '' },
+    el('div', { class: 't-top' }, el('span', { class: 't-brand' }, 'CostPatrol'), el('span', { class: 't-no' }, 'No. ' + String(i + 1).padStart(4, '0'))),
+    r.sample ? el('span', { class: 't-stamp' }, 'Sample') : null,
+    el('div', { class: 't-kind' }, 'Notice of waste'),
+    el('div', { class: 't-title' }, title),
+    el('dl', {},
+      el('dt', {}, 'Where'), el('dd', {}, place(f.region)),
+      el('dt', {}, 'When'), el('dd', {}, scanDay(r) || 'This week'),
+      el('dt', {}, 'Found'), el('dd', {}, f.detail),
+      el('dt', {}, 'ID'), el('dd', { class: 't-id' }, f.resource_id + (f.resource_name ? ' (' + f.resource_name + ')' : ''))),
+    el('div', { class: 't-fine' },
+      el('span', {}, el('span', { class: 't-meter', 'data-l': LEVEL[f.risk] || 1, 'aria-hidden': 'true' }, el('i'), el('i'), el('i')), 'Risk: ' + f.risk.toLowerCase()),
+      el('span', {}, el('b', {}, fine ? money(f.monthly_saving) : '$0.00'), el('small', {}, fine ? (f.saving_is_estimate ? 'a month, estimated' : 'a month') : 'no monthly cost yet'))),
+    el('p', { class: 't-do' }, el('b', {}, 'What to do: '), f.action));
+}
+
+let report = SAMPLE, slots = [], lit = -1;
+
+function render(r, source) {
+  report = r;
+  const fs = r.findings || [];
+  const t = r.totals || {};
+
+  // hero ticket: the biggest one
+  $('heroTicket').replaceChildren(fs.length ? ticket(fs[0], 0, r) : el('article', { class: 'ticket', 'data-ui': '' },
+    el('div', { class: 't-top' }, el('span', { class: 't-brand' }, 'CostPatrol'), el('span', { class: 't-no' }, 'All clear')),
+    el('div', { class: 't-title' }, 'Nothing left running this week')));
+
+  // showcase row
+  const nReg = (r.regions_scanned || []).length;
+  $('ticketsLead').textContent = !fs.length ? 'No tickets this week. Nothing is running that you are not using.'
+    : t.monthly_saving > 0 ? fs.length + ' tickets from ' + nReg + ' regions, worth ' + money(t.monthly_saving) + ' a month. Biggest first.'
+    : fs.length + ' tickets from ' + nReg + ' regions. None costs you money yet: they are tidying jobs that stop the bill creeping up later.';
+  const row = $('row');
+  slots = fs.map((f, i) => el('div', { class: 'slot', style: '--tilt:' + ((i % 2 ? 1 : -1) * (1.5 + (i % 3))) + 'deg' }, ticket(f, i, r)));
+  row.replaceChildren(...slots);
+  lit = -1; requestAnimationFrame(updateLit);
+  $('sourceNote').textContent = r.sample
+    ? 'These are sample tickets from a made-up account. Open your own report to see yours.'
+    : 'Your report' + (source ? ' (' + source + ')' : '') + ', read in this browser. Nothing was uploaded.';
+
+  // receipt
+  // one line per kind of ticket, grouped by what it is
+  const groups = {};
+  fs.forEach(f => {
+    const [name, , g] = plain(f);
+    const lines = (groups[g] = groups[g] || {});
+    const line = (lines[name] = lines[name] || { name, n: 0, v: 0 });
+    line.n++; line.v += Number(f.monthly_saving || 0);
+  });
+  const slip = $('slip');
+  slip.replaceChildren(
+    el('div', { class: 's-head' }, 'CostPatrol receipt'),
+    el('div', { class: 's-sub' }, (scanDay(r) || 'This week') + (r.sample ? ', sample account' : ', your account')),
+    ...Object.entries(groups).flatMap(([g, lines]) => [
+      el('div', { class: 's-group' }, g),
+      ...Object.values(lines).map(l => {
+        const box = el('input', { type: 'checkbox', 'data-v': l.v.toFixed(2), 'data-n': l.n, 'aria-label': 'Fix ' + l.name.toLowerCase() + (l.n > 1 ? ', ' + l.n + ' tickets' : '') });
+        box.checked = true;
+        return el('label', {}, box, el('span', { class: 's-name' }, l.name, l.n > 1 ? el('b', { class: 's-n' }, ' ×' + l.n) : null),
+          el('span', { class: 's-dots', 'aria-hidden': 'true' }), el('span', { class: 's-val' }, money(l.v)));
+      })]),
+    el('div', { class: 's-total' }, el('span', {}, 'You save each month'), el('span', { id: 'slipTotal' }, money(t.monthly_saving))));
+  updateTotal();
+
+  // spending
+  const sp = r.spend;
+  $('spending').hidden = !sp;
+  if (sp) {
+    $('spendTitle').textContent = 'Where ' + moneyRound(sp.total_last_month) + ' went';
+    const ch = sp.change_pct;
+    $('spendNote').textContent = 'Your AWS bill for ' + sp.last_month + ', ' + (ch == null ? 'the first month on record' :
+      (sp.change > 0 ? 'up ' : 'down ') + Math.abs(ch) + '% on ' + sp.month_before) +
+      (sp.forecast_this_month != null ? '. On track for ' + money(sp.forecast_this_month) + ' this month.' : '.');
+    const items = sp.top_services.filter(s => s.cost > 0).slice(0, 5);
+    const list = $('spendList');
+    list.replaceChildren(...items.map((s, i) => el('li', { style: '--i:' + i },
+      el('span', { class: 'big' }, serviceName(s.service)),
+      el('span', { class: 'fact' }, money(s.cost), el('small', {}, s.share_pct + '% of the bill')))));
+    fitList();
   }
-  for (const c of children) if (c !== null && c !== undefined && c !== false) node.append(c.nodeType ? c : String(c));
-  return node;
 }
 
-let current = SAMPLE;
-let filter = 'all';
+function updateTotal() {
+  const boxes = [...document.querySelectorAll('#slip input')];
+  const sum = boxes.filter(b => b.checked).reduce((a, b) => a + Number(b.dataset.v || 0), 0);
+  const count = bs => bs.reduce((a, b) => a + Number(b.dataset.n || 1), 0);
+  const n = count(boxes.filter(b => b.checked)), all = count(boxes);
+  const potential = boxes.reduce((a, b) => a + Number(b.dataset.v || 0), 0);
+  $('total').textContent = moneyRound(sum);
+  $('slipTotal').textContent = money(sum);
+  $('totalCaption').textContent = !all ? 'a month. Nothing to fix this week.'
+    : potential === 0 ? 'a month for now. These ' + all + ' tickets cost nothing yet; fixing them keeps it that way as your account grows.'
+    : 'a month, by fixing ' + n + ' of ' + all + ' tickets. That is ' + money(sum * 12) + ' a year.';
+}
 
-function render(report, source) {
-  current = report;
-  const t = report.totals || {};
-  const spend = report.spend;
+function updateLit() {
+  const row = $('row');
+  if (!slots.length) { $('nowTitle').textContent = 'All clear'; $('nowText').textContent = 'Nothing to fix this week.'; return; }
+  const mid = row.getBoundingClientRect().left + row.clientWidth / 2;
+  let best = 0, bestD = Infinity;
+  slots.forEach((s, i) => { const b = s.getBoundingClientRect(); const d = Math.abs(b.left + b.width / 2 - mid); if (d < bestD) { bestD = d; best = i; } });
+  if (best === lit) return;
+  lit = best;
+  slots.forEach((s, i) => s.classList.toggle('is-lit', i === best));
+  const f = report.findings[best], p = plain(f);
+  $('nowTitle').textContent = 'Ticket ' + (best + 1) + ' of ' + slots.length + ': ' + p[0];
+  $('nowText').textContent = p[1];
+}
+function go(step) {
+  const i = Math.max(0, Math.min(slots.length - 1, (lit < 0 ? 0 : lit) + step));
+  slots[i] && slots[i].scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', inline: 'center', block: 'nearest' });
+}
 
-  const meta = $('meta');
-  meta.replaceChildren(...[
-    el('span', {}, 'Scanned ' + (report.scanned_at || 'unknown')),
-    el('span', {}, (report.regions_scanned || []).length + ' regions'),
-    report.account_id ? el('span', {}, 'Account ' + report.account_id) : null,
-    el('span', {}, 'Read-only scan, nothing was changed')
-  ].filter(Boolean));
+function fitList() {
+  // desktop: every poster line at the same size, the largest at which the longest name still fits
+  const list = $('spendList');
+  const spans = [...list.querySelectorAll('.big')];
+  list.style.removeProperty('--list-size');
+  if (!spans.length || innerWidth <= 760) return;
+  const avail = list.clientWidth - 220;
+  const start = Math.min(innerWidth * 0.11, 168);
+  list.style.setProperty('--list-size', start + 'px');
+  const widest = Math.max(...spans.map(s => s.getBoundingClientRect().width));
+  if (widest > avail) list.style.setProperty('--list-size', Math.max(start * avail / widest, 56) + 'px');
+}
 
-  const banner = $('banner');
-  if (report.sample) {
-    banner.className = 'banner sample';
-    banner.replaceChildren(el('div', {}, el('strong', {}, 'Sample data. '),
-      'These findings are made up to show what the scanner reports for a typical small startup account. Run a scan, download its report.json and open it here. The file is read in your browser and never uploaded.'));
-  } else {
-    banner.className = 'banner loaded';
-    banner.replaceChildren(el('div', {}, el('strong', {}, 'Showing your report. '), (source || 'report.json') + ' was read in this browser and was not uploaded anywhere.'));
+function drawDiagram() {
+  // left: everything in the account, scattered; middle: the weekly walk lines it up; right: the tickets, biggest first
+  let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const W = 1200, H = 300, out = [];
+  for (let i = 0; i < 90; i++) {           // scattered resources, the wasted ones darker
+    const waste = i % 7 === 0;
+    const s = 10 + Math.floor(rnd() * 8);
+    out.push(`<rect x="${(rnd() * 330).toFixed(0)}" y="${(10 + rnd() * (H - 40)).toFixed(0)}" width="${s}" height="${s}" fill="${waste ? '#06525c' : '#a9c9c8'}" style="--d:${i}"/>`);
   }
-  $('sampleBtn').hidden = !!report.sample;
-
-  const change = spend && spend.change_pct;
-  const changeText = spend ? (change === null || change === undefined ? 'no earlier month to compare'
-    : (spend.change > 0 ? '↑ ' : '↓ ') + Math.abs(change) + '% on ' + spend.month_before) : 'Cost Explorer not enabled';
-  const kpis = [
-    { cls: 'kpi dark', label: 'Possible saving', value: moneyShort(t.monthly_saving) + '/mo', sub: money(t.yearly_saving) + ' a year' },
-    { cls: 'kpi', label: 'Findings', value: String(t.findings || 0), sub: 'ranked by saving below' },
-    { cls: 'kpi', label: spend ? 'Spend, ' + spend.last_month : 'Spend last month', value: spend ? moneyShort(spend.total_last_month) : '–',
-      sub: changeText, subCls: spend && spend.change > 0 ? 'up' : 'down' },
-    { cls: 'kpi', label: 'Forecast this month', value: spend && spend.forecast_this_month != null ? moneyShort(spend.forecast_this_month) : '–',
-      sub: 'AWS Cost Explorer forecast' },
-  ];
-  $('kpis').replaceChildren(...kpis.map(k => el('div', { class: 'card ' + k.cls },
-    el('div', { class: 'label' }, k.label), el('div', { class: 'value' }, k.value),
-    el('div', { class: 'sub ' + (k.subCls || '') }, k.sub))));
-
-  const section = $('spendSection');
-  section.hidden = !spend;
-  if (spend) {
-    $('spendLead').textContent = 'From Cost Explorer: ' + money(spend.total_last_month) + ' in ' + spend.last_month +
-      ' against ' + money(spend.total_month_before) + ' in ' + spend.month_before + '.';
-    $('topTitle').textContent = 'Top services, ' + spend.last_month;
-    const max = Math.max(...spend.top_services.map(s => s.cost), 1);
-    $('topServices').replaceChildren(...spend.top_services.map(s => el('div', { class: 'bar-row' },
-      el('span', { class: 'name', title: s.service }, s.service),
-      el('span', { class: 'amt' }, money(s.cost) + ' · ' + s.share_pct + '%'),
-      el('div', { class: 'bar' }, el('i', { style: 'width:' + (s.cost / max * 100).toFixed(1) + '%' })))));
-    const risers = spend.biggest_risers || [];
-    $('risers').replaceChildren(...(risers.length ? risers.map(r => el('div', { class: 'riser' },
-      el('div', { class: 'name' }, el('div', { title: r.service }, r.service), el('div', { class: 'from' }, money(r.from) + ' → ' + money(r.to))),
-      el('div', { class: 'amt' }, '+' + money(r.increase))))
-      : [el('div', { class: 'empty' }, 'No service cost more than the month before.')]));
+  for (let i = 0; i < 30; i++) {           // the walk: one patrol line through the middle
+    const x = 410 + i * 12.5, waste = i % 5 === 2;
+    out.push(`<rect x="${x}" y="${waste ? H / 2 - 22 : H / 2 - 5}" width="9" height="${waste ? 44 : 10}" fill="${waste ? '#06525c' : '#7fabad'}" style="--d:${90 + i}"/>`);
   }
-
-  const plan = report.savings_plan;
-  $('planCallout').replaceChildren(plan ? el('p', { class: 'callout' },
-    'AWS estimates a 1-year Compute Savings Plan of ' + money(plan.hourly_commitment) + '/hour would save about ',
-    el('strong', {}, money(plan.monthly_saving) + ' a month'), ' (' + plan.saving_pct + '%). Only commit if this usage will continue for a year.') : '');
-
-  filter = 'all';
-  renderChips();
-  renderRows();
+  const fines = [140, 61, 40, 33, 20, 16, 12, 4, 4, 3, 2];   // tickets, sized by what they cost
+  fines.forEach((f, i) => {
+    const w = 40 + f * 2.2, y = 14 + i * 25;
+    out.push(`<rect x="${W - w}" y="${y}" width="${w.toFixed(0)}" height="18" fill="#06525c" style="--d:${120 + i * 2}"/>`);
+  });
+  $('diagram').innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${out.join('')}</svg>`;
 }
 
-function renderChips() {
-  const counts = {};
-  for (const f of current.findings || []) counts[f.check] = (counts[f.check] || 0) + 1;
-  const make = (key, label, n) => {
-    const b = el('button', { class: 'chip', type: 'button', 'aria-pressed': String(filter === key) }, label, el('span', { class: 'n' }, n));
-    b.addEventListener('click', () => { filter = key; renderChips(); renderRows(); });
-    return b;
-  };
-  $('chips').replaceChildren(make('all', 'All', (current.findings || []).length),
-    ...Object.keys(counts).map(k => make(k, LABELS[k] || k, counts[k])));
-}
-
-function renderRows() {
-  const rows = (current.findings || []).filter(f => filter === 'all' || f.check === filter);
-  if (!rows.length) {
-    $('rows').replaceChildren(el('tr', {}, el('td', { colspan: '7', class: 'empty' }, 'No waste found.')));
-    return;
-  }
-  $('rows').replaceChildren(...rows.map((f, i) => el('tr', {},
-    el('td', { class: 'rank' }, i + 1),
-    el('td', { class: 'finding' },
-      el('div', { class: 'title' }, f.title),
-      el('div', {}, el('span', { class: 'rid' }, f.resource_id), f.resource_name ? el('span', { class: 'rname' }, ' · ' + f.resource_name) : null),
-      el('div', { class: 'detail' }, f.detail)),
-    el('td', { class: 'region' }, f.region),
-    el('td', { class: 'saving' }, f.monthly_saving ? money(f.monthly_saving) : 'Review', f.saving_is_estimate && f.monthly_saving ? el('span', { class: 'est' }, 'estimate') : null),
-    el('td', { class: 'effort' }, el('span', { class: 'pill ' + String(f.effort).toLowerCase() }, f.effort)),
-    el('td', { class: 'risk' }, el('span', { class: 'pill ' + String(f.risk).toLowerCase() }, f.risk)),
-    el('td', { class: 'action' }, f.action))));
-}
-
-function showError(message) {
-  const banner = $('banner');
-  banner.className = 'banner error';
-  banner.replaceChildren(el('div', {}, el('strong', {}, 'Could not open that file. '), message));
-}
-
+// events
+$('row').addEventListener('scroll', () => requestAnimationFrame(updateLit), { passive: true });
+$('row').addEventListener('keydown', e => { if (e.key === 'ArrowRight') { e.preventDefault(); go(1); } if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); } });
+$('prevBtn').addEventListener('click', () => go(-1));
+$('nextBtn').addEventListener('click', () => go(1));
+$('slip').addEventListener('change', updateTotal);
+addEventListener('resize', () => { fitList(); updateLit(); });
+if (document.fonts) document.fonts.ready.then(() => { fitList(); updateLit(); });
+// drag to scroll with a mouse
+(() => { const row = $('row'); let down = false, x0 = 0, s0 = 0;
+  row.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse') return; down = true; x0 = e.clientX; s0 = row.scrollLeft; row.style.scrollSnapType = 'none'; });
+  addEventListener('pointerup', () => { if (!down) return; down = false; row.style.scrollSnapType = ''; go(0); });
+  addEventListener('pointermove', e => { if (down) row.scrollLeft = s0 - (e.clientX - x0); }); })();
+document.querySelectorAll('label[for="fileInput"]').forEach(l => l.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('fileInput').click(); } }));
 $('fileInput').addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
+  const file = e.target.files[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = () => {
     try {
       const data = JSON.parse(reader.result);
-      if (!data || !Array.isArray(data.findings) || !data.totals) throw new Error('It is not a Cost Optimizer report.json.');
-      data.sample = false;
+      if (!data || !Array.isArray(data.findings) || !data.totals) throw new Error('It is not a CostPatrol report. Look for a file named report.json or latest.json.');
+      data.sample = false; $('errorNote').hidden = true;
       render(data, file.name);
-    } catch (err) { showError(err.message); }
+      location.hash = 'tickets';
+    } catch (err) { $('errorNote').textContent = 'That file could not be opened. ' + err.message; $('errorNote').hidden = false; }
   };
-  reader.readAsText(file);
-  e.target.value = '';
+  reader.readAsText(file); e.target.value = '';
 });
-$('openLabel').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('fileInput').click(); } });
-$('sampleBtn').addEventListener('click', () => render(SAMPLE));
-$('printBtn').addEventListener('click', () => window.print());
 
+drawDiagram();
 render(SAMPLE);
+
+// reveal once on entry
+(() => {
+  const els = [...document.querySelectorAll('[data-reveal], #spendList, #diagram')];
+  const show = n => n.classList.add('is-in');
+  requestAnimationFrame(() => setTimeout(() => show($('heroShutter')), 60));
+  if (!('IntersectionObserver' in window)) { els.forEach(show); return; }
+  const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { show(e.target); io.unobserve(e.target); } }), { rootMargin: '0px 0px -10% 0px', threshold: .08 });
+  els.forEach(n => io.observe(n));
+  addEventListener('load', () => setTimeout(() => els.forEach(n => { const b = n.getBoundingClientRect(); if (b.top < innerHeight && b.bottom > 0) show(n); }), 2500));
+})();
 </script>
 </body>
 </html>
