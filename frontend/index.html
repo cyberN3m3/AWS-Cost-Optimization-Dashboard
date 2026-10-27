@@ -217,7 +217,7 @@ const LABELS = {
   idle_load_balancer: 'Load balancers', log_retention: 'Log retention', s3_no_lifecycle: 'S3 lifecycle'
 };
 const money = v => '$' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const moneyShort = v => '$' + Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+const moneyShort = v => Number(v || 0) < 100 ? money(v) : '$' + Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
 const $ = id => document.getElementById(id);
 
 function el(tag, attrs, ...children) {
