@@ -6,6 +6,8 @@
 ![CI](https://github.com/cyberN3m3/AWS-Cost-Optimization-Dashboard/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 
+**Live dashboard:** https://d3tzbznu0q3ftw.cloudfront.net (sample data; open a report file to see real results)
+
 I built this because I kept seeing the same thing on AWS accounts: servers sitting idle, storage volumes nobody deleted, S3 buckets growing forever with no lifecycle rules. AWS doesn't tell you about any of it. It just bills you.
 
 So I built a scanner that runs every Monday morning, checks every region in the account, reads the bill from Cost Explorer, and produces a report that ranks every saving by how much it is worth, how much work it is and how risky it is. The first time I ran it on my own account it found a t3.micro that had been running for a week at 0.56% CPU, doing nothing.
