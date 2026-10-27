@@ -259,7 +259,65 @@ button, input, label { font: inherit; color: inherit; }
 @keyframes rise { to { opacity: 1; transform: none; } }
 @keyframes fade { to { opacity: 1; } }
 @keyframes sway { from { transform: rotate(-1.2deg); } to { transform: rotate(1.4deg); } }
-@media print { .nav, .cta, .pager, .row-wrap, .foot .contact { display: none !important; } .hero { min-height: auto; } }
+.print-head { display: none; }
+.link-btn { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: .2em; }
+.nav .link-btn { text-decoration-color: transparent; transition: text-decoration-color var(--t-hover) ease; }
+@media (hover: hover) and (pointer: fine) { .nav .link-btn:hover { text-decoration-color: currentColor; } }
+[data-ui].slip .s-print { display: flex; align-items: center; justify-content: center; gap: 8px; width: calc(100% + 24px); margin: 10px -12px 0; padding: 12px; background: transparent; color: var(--ink); border: 2px solid var(--ink); font: inherit; font-weight: 600; cursor: pointer; transition: background-color var(--t-hover) ease, color var(--t-hover) ease, transform var(--t-press) var(--ease-out); }
+[data-ui].slip .s-print:active { transform: scale(.98); }
+@media (hover: hover) and (pointer: fine) { [data-ui].slip .s-print:hover { background: var(--ink); color: var(--bg); } }
+
+/* paper: a report, not a poster. Summary first, then every ticket, two to a row */
+@page { size: A4; margin: 14mm 12mm 16mm; }
+@media print {
+  html { scroll-behavior: auto; }
+  body { background: #fff; color: var(--ink); font-size: 10pt; line-height: 1.4; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .nav, .hero, .cta, .foot, .how, .now, .sample-note, .error-note, .s-print, noscript { display: none !important; }
+  .js [data-reveal], .js .list li, .js .shutter, .js .shutter > *, .row .slot { opacity: 1 !important; transform: none !important; clip-path: none !important; animation: none !important; transition: none !important; }
+  main { display: grid; grid-template-columns: 1fr 1fr; column-gap: 8mm; align-items: start;
+    grid-template-areas: 'head head' 'left slip' 'spend slip' 'tix tix'; }
+  .print-head { display: block; grid-area: head; margin-bottom: 7mm; }
+  #savings { display: contents !important; }
+  .stats-left { grid-area: left; } .slip-wrap { grid-area: slip; }
+  #spending { grid-area: spend; break-inside: avoid; margin-top: 4mm !important; } #tickets { grid-area: tix; break-before: page; }
+  .showcase-head { break-after: avoid; }
+  .sec, .list, .showcase { padding: 0 !important; margin: 0 0 7mm; background: none !important; color: var(--ink) !important; min-height: 0; }
+  .stats { display: grid !important; grid-template-columns: 1fr 1fr; column-gap: 8mm; align-items: start; }
+  .stats-left, .slip-wrap { grid-column: auto !important; margin: 0 !important; }
+  .stats-left { gap: 5mm; }
+  .stats-left h2, .showcase-head h2, .list h2 { font-size: 18pt !important; }
+  .stats-left .note, .list .note, .showcase-head p { font-size: 9.5pt; margin-top: 2mm; max-width: none; }
+  .total b { font-size: 60pt !important; }
+  .total span { font-size: 9.5pt; margin-top: 3mm; }
+  [data-ui].slip { font-size: 9.5pt; padding: 5mm 5mm 9mm; border: 1px solid #b9d3d1; break-inside: avoid; }
+  [data-ui].slip .s-head { font-size: 15pt; }
+  .list ol { margin-top: 4mm; }
+  .list li { break-inside: avoid; }
+  .list li .big { font-size: 17pt !important; white-space: nowrap; }
+  .list li .fact { font-size: 12pt; }
+  .list h2 { font-size: 14pt !important; }
+  .showcase-head { display: block; padding: 0; }
+  .row-wrap { margin: 5mm 0 0; }
+  .row { display: flex !important; flex-wrap: wrap; gap: 5mm; overflow: visible !important; padding: 0 !important; }
+  .row .slot { flex: 0 0 calc(50% - 2.5mm) !important; break-inside: avoid; }
+  .row .slot [data-ui].ticket { background: #fff !important; outline: 1px solid #b9d3d1; font-size: 8.5pt; padding-bottom: 10px; }
+  [data-ui].ticket .t-top { padding: 7px 12px 6px; } [data-ui].ticket .t-brand { font-size: 12pt; }
+  [data-ui].ticket .t-kind { padding: 7px 12px 0; font-size: 8pt; }
+  [data-ui].ticket .t-title { font-size: 12.5pt; padding: 2px 12px 6px; }
+  [data-ui].ticket dl { padding: 6px 12px; gap: 2px 10px; }
+  [data-ui].ticket dt, [data-ui].ticket dd, [data-ui].ticket .t-id { font-size: 8.5pt; }
+  [data-ui].ticket dt:nth-of-type(2), [data-ui].ticket dd:nth-of-type(2), [data-ui].ticket .t-stamp { display: none; }
+  [data-ui].ticket .t-fine { margin: 2px 12px 0; padding-top: 6px; } [data-ui].ticket .t-fine b { font-size: 18pt; }
+  [data-ui].ticket .t-do { margin: 6px 12px 0; font-size: 8.5pt; }
+  .print-head .ph-top { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid var(--ink); padding-bottom: 3mm; }
+  .print-head .ph-brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-stretch: 62%; text-transform: uppercase; font-size: 14pt; }
+  .print-head .mark { --cut: #fff; width: 1.1em; }
+  .print-head .ph-title { font-weight: 800; font-stretch: 62%; text-transform: uppercase; font-size: 34pt; line-height: .9; margin: 6mm 0 4mm; }
+  .print-head dl { display: grid; grid-template-rows: auto auto; grid-auto-flow: column; gap: 1mm 9mm; justify-content: start; }
+  .print-head dt { font-size: 8pt; }
+  .print-head dd { font-size: 11pt; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .print-head .ph-note { margin-top: 4mm; font-size: 9pt; }
+}
 </style>
 </head>
 <body>
@@ -272,6 +330,7 @@ button, input, label { font: inherit; color: inherit; }
       <li class="hide-sm"><a class="link" href="#savings">Savings</a></li>
       <li class="hide-sm"><a class="link" href="#spending">Spending</a></li>
       <li class="hide-sm"><a class="link" href="#how">How it works</a></li>
+      <li class="hide-sm"><button type="button" class="link-btn" data-print>Save as PDF</button></li>
       <li><label class="open" for="fileInput" tabindex="0" role="button">Open a report</label></li>
     </ul>
   </nav>
@@ -279,6 +338,7 @@ button, input, label { font: inherit; color: inherit; }
 </header>
 
 <main id="top">
+  <section class="print-head" id="printHead" aria-hidden="true"></section>
   <section class="hero" aria-labelledby="heroTitle">
     <div class="hero-field">
       <h1 class="shout" id="heroTitle"><span>Left</span> <span>running</span></h1>
@@ -317,7 +377,7 @@ button, input, label { font: inherit; color: inherit; }
     <div class="stats-left">
       <div>
         <h2 class="shout" id="savingsTitle" data-reveal>What fixing them saves</h2>
-        <p class="note" data-reveal style="--i:1">Untick anything you want to keep. The total is what you'd stop paying each month.</p>
+        <p class="note" data-reveal style="--i:1">Untick anything you want to keep. The total is what you'd stop paying each month, and the PDF keeps your choices.</p>
       </div>
       <div class="total" data-reveal style="--i:2">
         <b class="num" id="total">$0</b>
@@ -450,6 +510,29 @@ function ticket(f, i, r) {
 
 let report = SAMPLE, slots = [], lit = -1;
 
+function printHead(r) {
+  // the first lines of the PDF: what this is, when, and the headline numbers
+  const t = r.totals || {}, sp = r.spend;
+  const cell = (k, v) => [el('dt', {}, k), el('dd', {}, v)];
+  $('printHead').replaceChildren(
+    el('div', { class: 'ph-top' }, el('span', { class: 'ph-brand' }, document.querySelector('.nav .mark').cloneNode(true), 'CostPatrol'),
+      el('span', {}, r.sample ? 'Sample report, made-up account' : 'AWS account ' + (r.account_id ? 'ending ' + String(r.account_id).slice(-4) : ''))),
+    el('div', { class: 'ph-title' }, 'AWS cost report'),
+    el('dl', {}, ...cell('Checked', scanDay(r) || '-'), ...cell('Regions', String((r.regions_scanned || []).length)),
+      ...cell('Tickets', String((r.findings || []).length)), ...cell('Could save', money(t.monthly_saving) + ' a month'),
+      ...cell('Last month\'s bill', sp ? money(sp.total_last_month) : '-')),
+    el('p', { class: 'ph-note' }, 'Read-only check: CostPatrol looked at the account and changed nothing. Every fix is your decision.'));
+}
+
+function printReport() {
+  // the browser names the PDF after the page title, so give it a useful one for the moment
+  const before = document.title;
+  const day = String(report.scanned_at || '').slice(0, 10);
+  document.title = 'CostPatrol report' + (day ? ' ' + day : '') + (report.sample ? ' (sample)' : '');
+  addEventListener('afterprint', () => { document.title = before; }, { once: true });
+  window.print();
+}
+
 function render(r, source) {
   report = r;
   const fs = r.findings || [];
@@ -469,9 +552,11 @@ function render(r, source) {
   slots = fs.map((f, i) => el('div', { class: 'slot', style: '--tilt:' + ((i % 2 ? 1 : -1) * (1.5 + (i % 3))) + 'deg' }, ticket(f, i, r)));
   row.replaceChildren(...slots);
   lit = -1; requestAnimationFrame(updateLit);
-  $('sourceNote').textContent = r.sample
-    ? 'These are sample tickets from a made-up account. Open your own report to see yours.'
-    : 'Your report' + (source ? ' (' + source + ')' : '') + ', read in this browser. Nothing was uploaded.';
+  $('sourceNote').replaceChildren(...(r.sample
+    ? ['These are sample tickets from a made-up account. Open your own report to see yours.']
+    : ['Your report' + (source ? ' (' + source + ')' : '') + ', read in this browser. Nothing was uploaded. ',
+       el('button', { type: 'button', class: 'link-btn', 'data-sample': '' }, 'Show the sample again')]));
+  printHead(r);
 
   // receipt
   // one line per kind of ticket, grouped by what it is
@@ -494,7 +579,8 @@ function render(r, source) {
         return el('label', {}, box, el('span', { class: 's-name' }, l.name, l.n > 1 ? el('b', { class: 's-n' }, ' ×' + l.n) : null),
           el('span', { class: 's-dots', 'aria-hidden': 'true' }), el('span', { class: 's-val' }, money(l.v)));
       })]),
-    el('div', { class: 's-total' }, el('span', {}, 'You save each month'), el('span', { id: 'slipTotal', class: 's-sum' }, money(t.monthly_saving))));
+    el('div', { class: 's-total' }, el('span', {}, 'You save each month'), el('span', { id: 'slipTotal', class: 's-sum' }, money(t.monthly_saving))),
+    el('button', { type: 'button', class: 's-print', 'data-print': '' }, 'Save as PDF'));
   updateTotal();
 
   // spending
@@ -596,6 +682,10 @@ if (document.fonts) document.fonts.ready.then(() => { fitList(); updateLit(); })
   addEventListener('pointermove', e => { if (down) row.scrollLeft = s0 - (e.clientX - x0); }); })();
 document.querySelectorAll('label[for="fileInput"]').forEach(l => l.addEventListener('keydown', e => {
   if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('fileInput').click(); } }));
+document.addEventListener('click', e => {
+  if (e.target.closest('[data-print]')) printReport();
+  if (e.target.closest('[data-sample]')) { $('errorNote').hidden = true; render(SAMPLE); location.hash = 'tickets'; }
+});
 $('fileInput').addEventListener('change', e => {
   const file = e.target.files[0]; if (!file) return;
   const reader = new FileReader();
