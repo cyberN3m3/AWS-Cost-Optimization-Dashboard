@@ -1,4 +1,4 @@
-"""AWS Cost Optimizer: a weekly, read-only scan for wasted AWS spend.
+"""CostPatrol: a weekly, read-only scan for wasted AWS spend.
 
 Runs on a schedule (EventBridge) or by hand with `aws lambda invoke`.
 There is no public API: the report goes to a private S3 bucket and a
@@ -125,9 +125,9 @@ def lambda_handler(event, context):
 
     if topic_arn:
         t = report['totals']
-        subject = (f"[AWS cost report] {t['findings']} findings, about "
+        subject = (f"[CostPatrol] {t['findings']} findings, about "
                    f"${t['monthly_saving']:,.2f}/month to save" if t['findings']
-                   else "[AWS cost report] No waste found this week")
+                   else "[CostPatrol] No waste found this week")
         boto3.client('sns', region_name=home_region).publish(
             TopicArn=topic_arn, Subject=subject[:100], Message=summary)
     if slack_webhook:
