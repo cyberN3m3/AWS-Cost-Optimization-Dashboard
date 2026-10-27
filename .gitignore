@@ -22,3 +22,6 @@ output.json
 # Reports from scan.py hold real account data
 reports/
 .pytest_cache/
+
+# design tool working files (screenshots, test builds)
+.taste-skill/
