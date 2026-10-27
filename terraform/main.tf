@@ -21,13 +21,23 @@ provider "aws" {
       Project     = var.project_name
       ManagedBy   = "Terraform"
       Environment = "portfolio"
-      Version     = "2.0"
+      Version     = "3.0"
     }
   }
 }
 
+data "aws_caller_identity" "current" {}
+
+locals {
+  account_id    = data.aws_caller_identity.current.account_id
+  log_group_arn = "arn:aws:logs:${var.aws_region}:${local.account_id}:log-group:/aws/lambda/${var.project_name}"
+}
+
+# ------------------------------------------------------------------ alerts --
+
 resource "aws_sns_topic" "cost_alerts" {
-  name = "${var.project_name}-alerts"
+  name              = "${var.project_name}-alerts"
+  kms_master_key_id = "alias/aws/sns"
 }
 
 resource "aws_sns_topic_subscription" "email" {
@@ -35,6 +45,86 @@ resource "aws_sns_topic_subscription" "email" {
   protocol  = "email"
   endpoint  = var.alert_email
 }
+
+# ------------------------------------------------------- private reports --
+
+resource "aws_s3_bucket" "reports" {
+  #checkov:skip=CKV_AWS_18:Access logging would need a second bucket; only the Lambda writes here
+  #checkov:skip=CKV_AWS_144:Cross-region replication is not worth the cost for weekly reports
+  #checkov:skip=CKV_AWS_145:SSE-S3 encryption is used; a customer managed KMS key costs $1/month
+  #checkov:skip=CKV2_AWS_62:No event notifications are needed on report uploads
+  bucket_prefix = "${var.project_name}-reports-"
+  force_destroy = true # reports are regenerated weekly; destroy removes them with the stack
+}
+
+resource "aws_s3_bucket_public_access_block" "reports" {
+  bucket                  = aws_s3_bucket.reports.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "reports" {
+  bucket = aws_s3_bucket.reports.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_versioning" "reports" {
+  bucket = aws_s3_bucket.reports.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "reports" {
+  bucket = aws_s3_bucket.reports.id
+
+  rule {
+    id     = "expire-old-reports"
+    status = "Enabled"
+    filter {
+      prefix = "reports/"
+    }
+    expiration {
+      days = var.report_retention_days
+    }
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+  }
+
+  rule {
+    id     = "abort-failed-uploads"
+    status = "Enabled"
+    filter {}
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "reports_tls_only" {
+  bucket     = aws_s3_bucket.reports.id
+  depends_on = [aws_s3_bucket_public_access_block.reports]
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "DenyInsecureTransport"
+      Effect    = "Deny"
+      Principal = "*"
+      Action    = "s3:*"
+      Resource  = [aws_s3_bucket.reports.arn, "${aws_s3_bucket.reports.arn}/*"]
+      Condition = { Bool = { "aws:SecureTransport" = "false" } }
+    }]
+  })
+}
+
+# ------------------------------------------------------------- the scanner --
 
 resource "aws_iam_role" "lambda_exec" {
   name = "${var.project_name}-lambda-role"
@@ -57,48 +147,70 @@ resource "aws_iam_role_policy" "lambda_permissions" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid      = "EC2ReadOnly"
-        Effect   = "Allow"
-        Action   = [
+        Sid    = "ReadOnlyInventory"
+        Effect = "Allow"
+        Action = [
+          "ec2:DescribeRegions",
           "ec2:DescribeInstances",
           "ec2:DescribeVolumes",
-          "ec2:DescribeRegions",
-          "ec2:DescribeReservedInstances",
-        ]
-        Resource = "*"
-      },
-      {
-        Sid      = "S3ReadOnly"
-        Effect   = "Allow"
-        Action   = [
-          "s3:ListAllMyBuckets",
-          "s3:GetBucketLifecycleConfiguration",
-        ]
-        Resource = "*"
-      },
-      {
-        Sid      = "CloudWatchMetricsReadOnly"
-        Effect   = "Allow"
-        Action   = [
+          "ec2:DescribeSnapshots",
+          "ec2:DescribeImages",
+          "ec2:DescribeAddresses",
+          "ec2:DescribeNatGateways",
+          "elasticloadbalancing:DescribeLoadBalancers",
+          "elasticloadbalancing:DescribeTargetGroups",
+          "elasticloadbalancing:DescribeTargetHealth",
           "cloudwatch:GetMetricStatistics",
+          "s3:ListAllMyBuckets",
+        ]
+        Resource = "*" # these calls cannot be scoped to specific resources
+      },
+      {
+        Sid      = "ReadLogGroupSettings"
+        Effect   = "Allow"
+        Action   = ["logs:DescribeLogGroups"]
+        Resource = "arn:aws:logs:*:${local.account_id}:log-group:*"
+      },
+      {
+        Sid      = "ReadBucketLifecycleRules"
+        Effect   = "Allow"
+        Action   = ["s3:GetLifecycleConfiguration"]
+        Resource = "arn:aws:s3:::*"
+      },
+      {
+        Sid    = "ReadOnlyBillingAndPrices"
+        Effect = "Allow"
+        Action = [
+          "ce:GetCostAndUsage",
+          "ce:GetCostForecast",
+          "ce:GetSavingsPlansPurchaseRecommendation",
+          "pricing:GetProducts",
         ]
         Resource = "*"
       },
       {
-        Sid      = "SNSPublishToOurTopicOnly"
+        Sid      = "WriteReportsOnly"
+        Effect   = "Allow"
+        Action   = ["s3:PutObject"]
+        Resource = "${aws_s3_bucket.reports.arn}/reports/*"
+      },
+      {
+        Sid      = "PublishToOurTopicOnly"
         Effect   = "Allow"
         Action   = ["sns:Publish"]
         Resource = aws_sns_topic.cost_alerts.arn
       },
       {
-        Sid      = "CloudWatchLogsWrite"
+        Sid      = "WriteOwnLogs"
         Effect   = "Allow"
-        Action   = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
-        ]
-        Resource = "arn:aws:logs:*:*:*"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "${local.log_group_arn}:*"
+      },
+      {
+        Sid      = "XRayTracing"
+        Effect   = "Allow"
+        Action   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords"]
+        Resource = "*"
       },
     ]
   })
@@ -108,9 +220,22 @@ data "archive_file" "lambda_zip" {
   type        = "zip"
   source_dir  = "${path.module}/../lambda"
   output_path = "${path.module}/lambda_function.zip"
+  excludes    = ["__pycache__"]
+}
+
+resource "aws_cloudwatch_log_group" "lambda_logs" {
+  #checkov:skip=CKV_AWS_338:14 days is enough for a weekly job and keeps log storage near zero
+  #checkov:skip=CKV_AWS_158:Logs hold no secrets; a customer managed KMS key costs $1/month
+  name              = "/aws/lambda/${var.project_name}"
+  retention_in_days = 14
 }
 
 resource "aws_lambda_function" "cost_optimizer" {
+  #checkov:skip=CKV_AWS_117:Only calls AWS APIs; putting it in a VPC would need a NAT gateway (~$32/month)
+  #checkov:skip=CKV_AWS_115:Reserving concurrency fails on new accounts that have a limit of 10
+  #checkov:skip=CKV_AWS_116:A failed weekly run is visible in the logs and simply runs again next week
+  #checkov:skip=CKV_AWS_272:Code signing is out of scope for a single-author portfolio tool
+  #checkov:skip=CKV_AWS_173:Environment variables hold only resource names, no secrets
   filename         = data.archive_file.lambda_zip.output_path
   source_code_hash = data.archive_file.lambda_zip.output_base64sha256
 
@@ -121,22 +246,24 @@ resource "aws_lambda_function" "cost_optimizer" {
   timeout       = 600
   memory_size   = 256
 
+  tracing_config {
+    mode = "Active"
+  }
+
   environment {
     variables = {
       SNS_TOPIC_ARN     = aws_sns_topic.cost_alerts.arn
+      REPORT_BUCKET     = aws_s3_bucket.reports.id
       SLACK_WEBHOOK_URL = var.slack_webhook_url
     }
   }
-}
 
-resource "aws_cloudwatch_log_group" "lambda_logs" {
-  name              = "/aws/lambda/${aws_lambda_function.cost_optimizer.function_name}"
-  retention_in_days = 14
+  depends_on = [aws_cloudwatch_log_group.lambda_logs]
 }
 
 resource "aws_cloudwatch_event_rule" "weekly" {
   name                = "${var.project_name}-weekly-trigger"
-  description         = "Trigger cost optimizer every Monday at 08:00 UTC"
+  description         = "Run the cost scan every Monday at 08:00 UTC"
   schedule_expression = "cron(0 8 ? * MON *)"
 }
 
@@ -154,42 +281,6 @@ resource "aws_lambda_permission" "allow_eventbridge" {
   source_arn    = aws_cloudwatch_event_rule.weekly.arn
 }
 
-resource "aws_apigatewayv2_api" "cost_api" {
-  name          = "${var.project_name}-api"
-  protocol_type = "HTTP"
-  description   = "HTTP endpoint to invoke the AWS Cost Optimizer Lambda"
-
-  cors_configuration {
-    allow_origins = ["*"]
-    allow_methods = ["POST", "OPTIONS"]
-    allow_headers = ["Content-Type"]
-    max_age       = 300
-  }
-}
-
-resource "aws_apigatewayv2_integration" "lambda" {
-  api_id                 = aws_apigatewayv2_api.cost_api.id
-  integration_type       = "AWS_PROXY"
-  integration_uri        = aws_lambda_function.cost_optimizer.invoke_arn
-  payload_format_version = "2.0"
-}
-
-resource "aws_apigatewayv2_route" "scan" {
-  api_id    = aws_apigatewayv2_api.cost_api.id
-  route_key = "POST /scan"
-  target    = "integrations/${aws_apigatewayv2_integration.lambda.id}"
-}
-
-resource "aws_apigatewayv2_stage" "default" {
-  api_id      = aws_apigatewayv2_api.cost_api.id
-  name        = "$default"
-  auto_deploy = true
-}
-
-resource "aws_lambda_permission" "allow_apigw" {
-  statement_id  = "AllowAPIGatewayInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.cost_optimizer.function_name
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.cost_api.execution_arn}/*/*"
-}
+# There is deliberately no API Gateway. Earlier versions exposed POST /scan
+# with no login, which let anyone run a scan and read the results. Scans now
+# run on the schedule or with `aws lambda invoke`, which needs IAM access.

@@ -19,3 +19,6 @@ __pycache__/
 
 # Test output files
 output.json
+# Reports from scan.py hold real account data
+reports/
+.pytest_cache/

@@ -21,7 +21,19 @@ variable "alert_email" {
 }
 
 variable "slack_webhook_url" {
-  description = "Slack incoming webhook URL (optional — leave empty to skip Slack alerts)"
+  description = "Slack incoming webhook URL (optional; leave empty to skip Slack)"
   type        = string
   default     = ""
+}
+
+variable "report_retention_days" {
+  description = "How many days to keep each weekly report in the private S3 bucket"
+  type        = number
+  default     = 180
+}
+
+variable "deploy_dashboard" {
+  description = "Host the dashboard page on CloudFront (HTTPS) from a private S3 bucket"
+  type        = bool
+  default     = true
 }
