@@ -43,7 +43,8 @@ It also asks Cost Explorer for a Compute Savings Plan recommendation and shows i
 - **Email:** a short summary through SNS: spend trend, total possible saving, and the top 5 items.
 - **Private S3 bucket:** the full `report.html` (print it or save as PDF) and `report.json` for every week. Reports expire after 180 days.
 - **Dashboard:** a static page on CloudFront over HTTPS. It shows labelled sample data, and you can open any `report.json` in it. The file is read in your browser and never uploaded. The page makes no calls to AWS.
-- **Slack:** optional, the same summary as the email.
+- **Slack:** optional, the same summary as the email. The webhook URL is stored as an SSM SecureString, not as a Lambda environment variable.
+- **If a scan fails:** the Lambda retries once, then its on-failure destination sends the error to the same email topic, so a broken week does not go unnoticed.
 
 There is no public API. An earlier version exposed `POST /scan` with no login, which let anyone run a scan and read the results. Scans now run on the schedule or with `aws lambda invoke`, which needs your own IAM access.
 
@@ -84,11 +85,13 @@ Then:
 
 To remove everything: `terraform destroy`. The report and dashboard buckets are emptied and deleted with it.
 
+State is local by default. For anything beyond a personal account, add an S3 backend with locking (`use_lockfile = true` on Terraform 1.10+) so the state is not tied to one machine.
+
 ## Cost
 
 | Item | Cost |
 |---|---|
-| Lambda, EventBridge, SNS email, S3, CloudFront | Inside the free tier at one scan a week |
+| Lambda (arm64), EventBridge, SNS email, S3, CloudFront | Inside the free tier at one scan a week |
 | Cost Explorer API | $0.01 per request; about 4 per scan, so about $0.16 a month |
 | Price List API | Free |
 
