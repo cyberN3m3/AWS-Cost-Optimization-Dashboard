@@ -21,9 +21,10 @@ variable "alert_email" {
 }
 
 variable "slack_webhook_url" {
-  description = "Slack incoming webhook URL (optional; leave empty to skip Slack)"
+  description = "Slack incoming webhook URL (optional; leave empty to skip Slack). Stored as an SSM SecureString."
   type        = string
   default     = ""
+  sensitive   = true
 }
 
 variable "report_retention_days" {

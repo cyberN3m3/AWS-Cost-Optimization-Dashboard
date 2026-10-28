@@ -54,7 +54,7 @@ button, input, label { font: inherit; color: inherit; }
 .vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .num { font-variant-numeric: tabular-nums; }
 
-/* buttons: one shape, square corners */
+/* buttons */
 .button { display: inline-flex; align-items: center; gap: 10px; padding: 18px 26px; background: var(--accent); color: var(--accent-ink); font-weight: 500; text-decoration: none; border: 0; cursor: pointer; transition: transform var(--t-press) var(--ease-out), background-color var(--t-hover) ease; }
 .button:active { transform: scale(.97); }
 @media (hover: hover) and (pointer: fine) { .button:hover { background: var(--accent-strong); } }
@@ -70,7 +70,7 @@ button, input, label { font: inherit; color: inherit; }
 @media (hover: hover) and (pointer: fine) { .nav .open:hover { background: var(--field-1-soft); } }
 @media (max-width: 860px) { .nav .hide-sm { display: none; } }
 
-/* hero: teal field, paper band, ticket on the seam */
+/* hero */
 .hero { position: relative; min-height: 100svh; display: grid; grid-template-rows: 82fr 18fr; overflow: clip; }
 .hero-field { background: var(--field-1); color: var(--field-1-ink); padding: 0 var(--m); position: relative; }
 .hero h1 { font-size: var(--step-shout); padding-top: max(15svh, 104px); position: relative; z-index: 1; }
@@ -79,6 +79,13 @@ button, input, label { font: inherit; color: inherit; }
 .hero-band p { font-size: var(--step-lead); line-height: 1.3; max-width: 34ch; }
 .hero-band strong { font-weight: 600; }
 .hero-ticket { position: absolute; right: 8vw; bottom: -96px; width: min(31vw, 460px); z-index: 2; transform: rotate(5deg); }
+@media (min-width: 1101px) and (max-height: 860px) {
+  .hero { grid-template-rows: 1fr auto; }
+  .hero h1 { font-size: min(var(--step-shout), 26svh); padding-top: max(12svh, 96px); }
+  .hero-ticket { width: min(28vw, 400px, 52svh); bottom: -64px; }
+  .hero-band { padding-right: calc(8vw + min(28vw, 400px, 52svh) + 24px); }
+  .hero-band .button { white-space: nowrap; }
+}
 @media (min-width: 761px) and (max-width: 1100px) {
   .hero { grid-template-rows: 1fr auto; }
   .hero-band { flex-direction: column; align-items: flex-start; gap: 16px; padding-right: 44vw; }
@@ -93,7 +100,7 @@ button, input, label { font: inherit; color: inherit; }
   .hero-band .button { justify-content: center; }
 }
 
-/* the ticket: a piece of the product, its own conventions */
+/* ticket */
 [data-ui].ticket { --t-ink: #06525c; background: #ffffff; color: var(--t-ink); font-size: 15px; line-height: 1.35; position: relative; padding: 0 0 18px; clip-path: polygon(0 0, 100% 0, 100.0% calc(100% - 8px), 97.5% 100%, 95.0% calc(100% - 8px), 92.5% 100%, 90.0% calc(100% - 8px), 87.5% 100%, 85.0% calc(100% - 8px), 82.5% 100%, 80.0% calc(100% - 8px), 77.5% 100%, 75.0% calc(100% - 8px), 72.5% 100%, 70.0% calc(100% - 8px), 67.5% 100%, 65.0% calc(100% - 8px), 62.5% 100%, 60.0% calc(100% - 8px), 57.5% 100%, 55.0% calc(100% - 8px), 52.5% 100%, 50.0% calc(100% - 8px), 47.5% 100%, 45.0% calc(100% - 8px), 42.5% 100%, 40.0% calc(100% - 8px), 37.5% 100%, 35.0% calc(100% - 8px), 32.5% 100%, 30.0% calc(100% - 8px), 27.5% 100%, 25.0% calc(100% - 8px), 22.5% 100%, 20.0% calc(100% - 8px), 17.5% 100%, 15.0% calc(100% - 8px), 12.5% 100%, 10.0% calc(100% - 8px), 7.5% 100%, 5.0% calc(100% - 8px), 2.5% 100%, 0.0% calc(100% - 8px)); }
 [data-ui].ticket .t-top { background: var(--t-ink); color: #ffffff; padding: 14px 18px 12px; display: flex; justify-content: space-between; align-items: baseline; }
 [data-ui].ticket .t-brand { font-weight: 800; font-stretch: 62%; text-transform: uppercase; font-size: 22px; letter-spacing: .02em; }
@@ -119,7 +126,7 @@ button, input, label { font: inherit; color: inherit; }
 .sec h2 { font-size: var(--step-head); }
 .lead { font-size: var(--step-lead); line-height: 1.3; max-width: 32ch; margin-top: 18px; }
 
-/* showcase: teal field, a row of tickets, the centred one lit */
+/* showcase */
 .showcase { background: var(--field-1); color: var(--field-1-ink); padding: clamp(80px, 9vw, 130px) 0 clamp(90px, 10vw, 140px); }
 .showcase-head { padding: 0 var(--m); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 24ch); gap: 24px 48px; align-items: end; }
 .showcase-head h2 { font-size: var(--step-head); }
@@ -146,7 +153,7 @@ button, input, label { font: inherit; color: inherit; }
   .now { grid-template-columns: 1fr; }
 }
 
-/* stats: the total and its receipt */
+/* total and receipt */
 .stats { background: var(--surface); display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; }
 .stats-left { grid-column: 1 / 8; display: flex; flex-direction: column; gap: clamp(48px, 7vw, 112px); }
 .stats-left h2 { font-size: clamp(2.5rem, 1.6rem + 2.4vw, 3.5rem); }
@@ -173,7 +180,7 @@ button, input, label { font: inherit; color: inherit; }
   .slip-wrap { margin-top: 48px; }
 }
 
-/* spending: one item per poster line */
+/* spending */
 .list { padding: 96px var(--m); }
 .list h2 { font-size: clamp(2.5rem, 1.6rem + 2.4vw, 3.5rem); max-width: 18ch; }
 .list .note { margin-top: 14px; max-width: 52ch; }
@@ -190,7 +197,7 @@ button, input, label { font: inherit; color: inherit; }
   .list li .fact { font-size: 24px; padding-top: 6px; }
 }
 
-/* how it works: many into one */
+/* how it works */
 .how { background: var(--surface); }
 .how-head { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; }
 .how-head > div { grid-column: 1 / 6; }
@@ -207,7 +214,7 @@ button, input, label { font: inherit; color: inherit; }
   .steps { grid-template-columns: 1fr; gap: 28px; }
 }
 
-/* cta: the whole band is the action */
+/* cta */
 .cta { display: flex; flex-direction: column; justify-content: space-between; gap: clamp(64px, 10vw, 160px); position: relative; background: var(--accent); color: var(--accent-ink); padding: 28px var(--m) 20px; text-decoration: none; cursor: pointer; overflow: clip; transition: background-color 260ms ease, color 260ms ease; }
 .cta .what { font-size: var(--step-lead); max-width: 30ch; line-height: 1.3; padding-right: 64px; }
 .cta .arrow { position: absolute; right: var(--m); top: 28px; width: 48px; height: 48px; transition: transform 360ms var(--ease-out); }
@@ -217,7 +224,7 @@ button, input, label { font: inherit; color: inherit; }
 .cta:active .word { transform: scale(.99); transform-origin: 0 100%; }
 @media (max-width: 760px) { .cta .arrow { width: 32px; height: 32px; } .cta .what { padding-right: 44px; } .cta .word { font-size: 44vw; } }
 
-/* footer: the contact is the headline */
+/* footer */
 .foot { background: var(--surface); color: var(--ink); min-height: 72svh; padding: 40px var(--m) 28px; display: flex; flex-direction: column; justify-content: space-between; gap: 64px; }
 .foot-top { display: flex; justify-content: space-between; gap: 24px; align-items: start; font-size: 15px; }
 .foot-top ul { list-style: none; display: grid; gap: 4px; max-width: 46ch; }
@@ -267,7 +274,7 @@ button, input, label { font: inherit; color: inherit; }
 [data-ui].slip .s-print:active { transform: scale(.98); }
 @media (hover: hover) and (pointer: fine) { [data-ui].slip .s-print:hover { background: var(--ink); color: var(--bg); } }
 
-/* paper: a report, not a poster. Summary first, then every ticket, two to a row */
+/* print: summary on page 1, then tickets two per row */
 @page { size: A4; margin: 14mm 12mm 16mm; }
 @media print {
   html { scroll-behavior: auto; }
@@ -511,7 +518,7 @@ function ticket(f, i, r) {
 let report = SAMPLE, slots = [], lit = -1;
 
 function printHead(r) {
-  // the first lines of the PDF: what this is, when, and the headline numbers
+  // PDF header
   const t = r.totals || {}, sp = r.spend;
   const cell = (k, v) => [el('dt', {}, k), el('dd', {}, v)];
   $('printHead').replaceChildren(
@@ -525,7 +532,7 @@ function printHead(r) {
 }
 
 function printReport() {
-  // the browser names the PDF after the page title, so give it a useful one for the moment
+  // the browser uses the page title as the PDF file name
   const before = document.title;
   const day = String(report.scanned_at || '').slice(0, 10);
   document.title = 'CostPatrol report' + (day ? ' ' + day : '') + (report.sample ? ' (sample)' : '');
@@ -538,7 +545,7 @@ function render(r, source) {
   const fs = r.findings || [];
   const t = r.totals || {};
 
-  // hero ticket: the biggest one
+  // hero ticket = biggest finding
   $('heroTicket').replaceChildren(fs.length ? ticket(fs[0], 0, r) : el('article', { class: 'ticket', 'data-ui': '' },
     el('div', { class: 't-top' }, el('span', { class: 't-brand' }, 'CostPatrol'), el('span', { class: 't-no' }, 'All clear')),
     el('div', { class: 't-title' }, 'Nothing left running this week')));
@@ -559,7 +566,7 @@ function render(r, source) {
   printHead(r);
 
   // receipt
-  // one line per kind of ticket, grouped by what it is
+  // one line per check type
   const groups = {};
   fs.forEach(f => {
     const [name, , g] = plain(f);
@@ -634,7 +641,7 @@ function go(step) {
 }
 
 function fitList() {
-  // desktop: every poster line at the same size, the largest at which the longest name still fits
+  // size every service name to fit the longest one
   const list = $('spendList');
   const spans = [...list.querySelectorAll('.big')];
   list.style.removeProperty('--list-size');
@@ -647,7 +654,7 @@ function fitList() {
 }
 
 function drawDiagram() {
-  // left: everything in the account, scattered; middle: the weekly walk lines it up; right: the tickets, biggest first
+  // diagram: resources -> scan -> tickets
   let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const W = 1200, H = 300, out = [];
   for (let i = 0; i < 90; i++) {           // scattered resources, the wasted ones darker
@@ -655,7 +662,7 @@ function drawDiagram() {
     const s = 10 + Math.floor(rnd() * 8);
     out.push(`<rect x="${(rnd() * 330).toFixed(0)}" y="${(10 + rnd() * (H - 40)).toFixed(0)}" width="${s}" height="${s}" fill="${waste ? '#06525c' : '#a9c9c8'}" style="--d:${i}"/>`);
   }
-  for (let i = 0; i < 30; i++) {           // the walk: one patrol line through the middle
+  for (let i = 0; i < 30; i++) {           // centre line
     const x = 410 + i * 12.5, waste = i % 5 === 2;
     out.push(`<rect x="${x}" y="${waste ? H / 2 - 22 : H / 2 - 5}" width="9" height="${waste ? 44 : 10}" fill="${waste ? '#06525c' : '#7fabad'}" style="--d:${90 + i}"/>`);
   }

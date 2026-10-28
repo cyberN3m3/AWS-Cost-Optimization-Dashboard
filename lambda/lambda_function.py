@@ -2,7 +2,8 @@
 
 Runs on a schedule (EventBridge) or by hand with `aws lambda invoke`.
 There is no public API: the report goes to a private S3 bucket and a
-summary goes to email (and Slack if configured).
+summary goes to email (and Slack if configured). If a run fails, the
+Lambda on-failure destination sends the error to the same email topic.
 """
 
 import json
@@ -38,11 +39,18 @@ def run_check(label, func, *args):
         return []
 
 
-def scan_region(region, price_book, session=boto3):
-    ec2 = session.client('ec2', region_name=region)
-    cw = session.client('cloudwatch', region_name=region)
-    elbv2 = session.client('elbv2', region_name=region)
-    logs = session.client('logs', region_name=region)
+def region_clients(session, region):
+    """boto3 clients are thread-safe, but creating them is not, so make them before the threads start."""
+    return {
+        'ec2': session.client('ec2', region_name=region),
+        'cw': session.client('cloudwatch', region_name=region),
+        'elbv2': session.client('elbv2', region_name=region),
+        'logs': session.client('logs', region_name=region),
+    }
+
+
+def scan_region(region, price_book, clients):
+    ec2, cw, elbv2, logs = clients['ec2'], clients['cw'], clients['elbv2'], clients['logs']
     found = []
     found += run_check('idle EC2', checks.idle_ec2_instances, ec2, cw, region, price_book)
     found += run_check('unattached EBS', checks.unattached_volumes, ec2, region)
@@ -56,13 +64,15 @@ def scan_region(region, price_book, session=boto3):
     return found
 
 
-def scan_account(session=boto3, home_region='us-east-1', regions=None):
+def scan_account(session=None, home_region='us-east-1', regions=None):
+    session = session or boto3.session.Session()
     price_book = Ec2PriceBook(session.client('pricing', region_name='us-east-1'))
     regions = regions or enabled_regions(session.client('ec2', region_name=home_region))
     print(f"Scanning {len(regions)} regions")
+    clients = {r: region_clients(session, r) for r in regions}
     findings = []
     with ThreadPoolExecutor(max_workers=8) as pool:
-        futures = [pool.submit(scan_region, r, price_book, session) for r in regions]
+        futures = [pool.submit(scan_region, r, price_book, clients[r]) for r in regions]
         for future in as_completed(futures):
             findings += future.result()
     findings += run_check('S3 lifecycle', checks.buckets_without_lifecycle, session.client('s3'))
@@ -87,6 +97,18 @@ def save_report(s3, bucket, report, html_text):
     return f"s3://{bucket}/{prefix}/report.html"
 
 
+def slack_webhook_url(param_name, region):
+    """The webhook is a secret, so it lives in SSM Parameter Store, not in an environment variable."""
+    if not param_name:
+        return ''
+    try:
+        ssm = boto3.client('ssm', region_name=region)
+        return ssm.get_parameter(Name=param_name, WithDecryption=True)['Parameter']['Value']
+    except Exception as exc:
+        print(f"Could not read the Slack webhook, skipping Slack: {exc}")
+        return ''
+
+
 def send_slack(webhook_url, text):
     req = urllib.request.Request(
         webhook_url, data=json.dumps({'text': text}).encode(),
@@ -102,7 +124,7 @@ def lambda_handler(event, context):
     home_region = os.environ.get('AWS_REGION', 'us-east-1')
     bucket = os.environ.get('REPORT_BUCKET')
     topic_arn = os.environ.get('SNS_TOPIC_ARN')
-    slack_webhook = os.environ.get('SLACK_WEBHOOK_URL', '')
+    slack_param = os.environ.get('SLACK_WEBHOOK_PARAM', '')
 
     findings, spend, plan, regions = scan_account(home_region=home_region)
     account_id = ''
@@ -130,6 +152,7 @@ def lambda_handler(event, context):
                    else "[CostPatrol] No waste found this week")
         boto3.client('sns', region_name=home_region).publish(
             TopicArn=topic_arn, Subject=subject[:100], Message=summary)
+    slack_webhook = slack_webhook_url(slack_param, home_region)
     if slack_webhook:
         send_slack(slack_webhook, summary)
 

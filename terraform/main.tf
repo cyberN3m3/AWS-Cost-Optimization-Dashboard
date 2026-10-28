@@ -31,6 +31,7 @@ data "aws_caller_identity" "current" {}
 locals {
   account_id    = data.aws_caller_identity.current.account_id
   log_group_arn = "arn:aws:logs:${var.aws_region}:${local.account_id}:log-group:/aws/lambda/${var.project_name}"
+  use_slack     = nonsensitive(var.slack_webhook_url != "")
 }
 
 # ------------------------------------------------------------------ alerts --
@@ -126,6 +127,16 @@ resource "aws_s3_bucket_policy" "reports_tls_only" {
 
 # ------------------------------------------------------------- the scanner --
 
+# The webhook URL is a credential (anyone with it can post to the channel),
+# so it is kept in Parameter Store instead of a plain environment variable.
+resource "aws_ssm_parameter" "slack_webhook" {
+  #checkov:skip=CKV_AWS_337:The AWS managed SSM key is enough; a customer managed KMS key costs $1/month
+  count = local.use_slack ? 1 : 0
+  name  = "/${var.project_name}/slack-webhook-url"
+  type  = "SecureString"
+  value = var.slack_webhook_url
+}
+
 resource "aws_iam_role" "lambda_exec" {
   name = "${var.project_name}-lambda-role"
 
@@ -145,7 +156,7 @@ resource "aws_iam_role_policy" "lambda_permissions" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Sid    = "ReadOnlyInventory"
         Effect = "Allow"
@@ -212,7 +223,12 @@ resource "aws_iam_role_policy" "lambda_permissions" {
         Action   = ["xray:PutTraceSegments", "xray:PutTelemetryRecords"]
         Resource = "*"
       },
-    ]
+      ], local.use_slack ? [{
+        Sid      = "ReadSlackWebhook"
+        Effect   = "Allow"
+        Action   = ["ssm:GetParameter"]
+        Resource = aws_ssm_parameter.slack_webhook[0].arn
+    }] : [])
   })
 }
 
@@ -233,7 +249,7 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
 resource "aws_lambda_function" "cost_optimizer" {
   #checkov:skip=CKV_AWS_117:Only calls AWS APIs; putting it in a VPC would need a NAT gateway (~$32/month)
   #checkov:skip=CKV_AWS_115:Reserving concurrency fails on new accounts that have a limit of 10
-  #checkov:skip=CKV_AWS_116:A failed weekly run is visible in the logs and simply runs again next week
+  #checkov:skip=CKV_AWS_116:Failed runs go to the SNS topic through the on-failure destination below
   #checkov:skip=CKV_AWS_272:Code signing is out of scope for a single-author portfolio tool
   #checkov:skip=CKV_AWS_173:Environment variables hold only resource names, no secrets
   filename         = data.archive_file.lambda_zip.output_path
@@ -243,6 +259,7 @@ resource "aws_lambda_function" "cost_optimizer" {
   role          = aws_iam_role.lambda_exec.arn
   handler       = "lambda_function.lambda_handler"
   runtime       = "python3.12"
+  architectures = ["arm64"] # pure Python, and Graviton is about 20% cheaper
   timeout       = 600
   memory_size   = 256
 
@@ -252,13 +269,26 @@ resource "aws_lambda_function" "cost_optimizer" {
 
   environment {
     variables = {
-      SNS_TOPIC_ARN     = aws_sns_topic.cost_alerts.arn
-      REPORT_BUCKET     = aws_s3_bucket.reports.id
-      SLACK_WEBHOOK_URL = var.slack_webhook_url
+      SNS_TOPIC_ARN       = aws_sns_topic.cost_alerts.arn
+      REPORT_BUCKET       = aws_s3_bucket.reports.id
+      SLACK_WEBHOOK_PARAM = local.use_slack ? aws_ssm_parameter.slack_webhook[0].name : ""
     }
   }
 
   depends_on = [aws_cloudwatch_log_group.lambda_logs]
+}
+
+# EventBridge invokes the Lambda asynchronously, so a crash would otherwise
+# go unnoticed until someone reads the logs. Retry once, then email the error.
+resource "aws_lambda_function_event_invoke_config" "cost_optimizer" {
+  function_name          = aws_lambda_function.cost_optimizer.function_name
+  maximum_retry_attempts = 1
+
+  destination_config {
+    on_failure {
+      destination = aws_sns_topic.cost_alerts.arn
+    }
+  }
 }
 
 resource "aws_cloudwatch_event_rule" "weekly" {
